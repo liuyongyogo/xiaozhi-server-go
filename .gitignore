@@ -1,7 +1,6 @@
 xiaozhi-server
 /logs
 /tmp
-/.config.yaml
 /.mcp_server_settings.json
 xiaozhi-server-go
 .mcp_server_settings copy.json
@@ -11,3 +10,4 @@ wake_replay
 .env
 config.db
 /ota_bin
+.config.yaml

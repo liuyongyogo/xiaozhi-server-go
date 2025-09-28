@@ -90,7 +90,14 @@ func (h *ConnectionHandler) processClientTextMessage(ctx context.Context, text s
 	case "image":
 		return h.handleImageMessage(ctx, msgMap)
 	case "mcp":
-		return h.mcpManager.HandleXiaoZhiMCPMessage(msgMap)
+		h.logger.Info(h.deviceID, "收到MCP消息，开始处理")
+		err := h.mcpManager.HandleXiaoZhiMCPMessage(msgMap)
+		if err != nil {
+			h.logger.Error(h.deviceID, fmt.Sprintf("处理MCP消息失败: %v", err))
+		} else {
+			h.logger.Debug(h.deviceID, "MCP消息处理完成")
+		}
+		return err
 	default:
 		h.logger.Warn("=== 未知消息类型 ===", map[string]interface{}{
 			"unknown_type": msgType,
@@ -113,7 +120,7 @@ func (h *ConnectionHandler) handleVisionMessage(msgMap map[string]interface{}) e
 // handleHelloMessage 处理欢迎消息
 // 客户端会上传语音格式和采样率等信息
 func (h *ConnectionHandler) handleHelloMessage(msgMap map[string]interface{}) error {
-	h.LogInfo("收到客户端欢迎消息: " + fmt.Sprintf("%v", msgMap))
+	h.logger.Info(h.deviceID, "收到客户端欢迎消息: "+fmt.Sprintf("%v", msgMap))
 	// 获取客户端编码格式
 	if audioParams, ok := msgMap["audio_params"].(map[string]interface{}); ok {
 		if format, ok := audioParams["format"].(string); ok {
@@ -132,7 +139,7 @@ func (h *ConnectionHandler) handleHelloMessage(msgMap map[string]interface{}) er
 		if frameDuration, ok := audioParams["frame_duration"].(float64); ok {
 			h.clientAudioFrameDuration = int(frameDuration)
 		}
-		h.LogInfo(fmt.Sprintf("客户端音频参数: format=%s, sample_rate=%d, channels=%d, frame_duration=%d",
+		h.logger.Info(h.deviceID, fmt.Sprintf("客户端音频参数: format=%s, sample_rate=%d, channels=%d, frame_duration=%d",
 			h.clientAudioFormat, h.clientAudioSampleRate, h.clientAudioChannels, h.clientAudioFrameDuration))
 	}
 	h.sendHelloMessage()
@@ -146,7 +153,7 @@ func (h *ConnectionHandler) handleHelloMessage(msgMap map[string]interface{}) er
 		h.logger.Error(fmt.Sprintf("初始化Opus解码器失败: %v", err))
 	} else {
 		h.opusDecoder = opusDecoder
-		h.LogInfo("Opus解码器初始化成功")
+		h.logger.Info(h.deviceID, "Opus解码器初始化成功")
 	}
 
 	return nil
@@ -164,7 +171,7 @@ func (h *ConnectionHandler) handleListenMessage(msgMap map[string]interface{}) e
 	// 处理mode参数
 	if mode, ok := msgMap["mode"].(string); ok {
 		h.clientListenMode = mode
-		h.LogInfo(fmt.Sprintf("客户端拾音模式：%s， %s", h.clientListenMode, state))
+		h.logger.Info(h.deviceID, fmt.Sprintf("客户端拾音模式：%s， %s", h.clientListenMode, state))
 		h.providers.asr.SetListener(h)
 	}
 
@@ -177,13 +184,13 @@ func (h *ConnectionHandler) handleListenMessage(msgMap map[string]interface{}) e
 		h.client_asr_text = ""
 	case "stop":
 		h.clientVoiceStop = true
-		h.LogInfo("客户端停止语音识别")
+		h.logger.Info(h.deviceID, "客户端停止语音识别")
 	case "detect":
 		text, hasText := msgMap["text"].(string)
 
 		if hasText && text != "" {
 			// 只有文本，使用普通LLM处理
-			h.LogInfo(fmt.Sprintf("检测到纯文本消息，使用LLM处理 %v", map[string]interface{}{
+			h.logger.Info(h.deviceID, fmt.Sprintf("检测到纯文本消息，使用LLM处理 %v", map[string]interface{}{
 				"text": text,
 			}))
 			return h.handleChatMessage(context.Background(), text)
@@ -201,12 +208,12 @@ func (h *ConnectionHandler) handleIotMessage(msgMap map[string]interface{}) erro
 	if descriptors, ok := msgMap["descriptors"].([]interface{}); ok {
 		// 处理设备描述符
 		// 这里需要实现具体的IOT设备描述符处理逻辑
-		h.LogInfo(fmt.Sprintf("收到IOT设备描述符：%v", descriptors))
+		h.logger.Info(h.deviceID, fmt.Sprintf("收到IOT设备描述符：%v", descriptors))
 	}
 	if states, ok := msgMap["states"].([]interface{}); ok {
 		// 处理设备状态
 		// 这里需要实现具体的IOT设备状态处理逻辑
-		h.LogInfo(fmt.Sprintf("收到IOT设备状态：%v", states))
+		h.logger.Info(h.deviceID, fmt.Sprintf("收到IOT设备状态：%v", states))
 	}
 	return nil
 }
@@ -216,7 +223,7 @@ func (h *ConnectionHandler) handleImageMessage(ctx context.Context, msgMap map[s
 	// 增加对话轮次
 	h.talkRound++
 	currentRound := h.talkRound
-	h.LogInfo(fmt.Sprintf("开始新的图片对话轮次: %d", currentRound))
+	h.logger.Info(h.deviceID, fmt.Sprintf("开始新的图片对话轮次: %d", currentRound))
 
 	// 判断是否需要验证
 	if h.isNeedAuth() {
@@ -224,7 +231,7 @@ func (h *ConnectionHandler) handleImageMessage(ctx context.Context, msgMap map[s
 			h.logger.Error(fmt.Sprintf("检查认证码失败: %v", err))
 			return err
 		}
-		h.LogInfo("设备未认证，等待管理员认证")
+		h.logger.Info(h.deviceID, "设备未认证，等待管理员认证")
 		return nil
 	}
 
@@ -262,7 +269,7 @@ func (h *ConnectionHandler) handleImageMessage(ctx context.Context, msgMap map[s
 		return fmt.Errorf("图片数据为空")
 	}
 
-	h.LogInfo(fmt.Sprintf("收到图片消息 %v", map[string]interface{}{
+	h.logger.Info(h.deviceID, fmt.Sprintf("收到图片消息 %v", map[string]interface{}{
 		"text":        text,
 		"has_url":     imageData.URL != "",
 		"has_data":    imageData.Data != "",

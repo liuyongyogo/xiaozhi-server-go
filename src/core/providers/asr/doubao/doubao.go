@@ -539,7 +539,9 @@ func (p *Provider) ReadMessage() {
 					text = textData
 				}
 
-				p.logger.Debug("[DEBUG] 流式识别: 识别成功, 文本='%s'", text)
+				if text != "" {
+					p.logger.Warn("[WARN]流式识别: 识别成功, 文本='%s'", text)
+				}
 
 				p.connMutex.Lock()
 				p.result = text

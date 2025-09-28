@@ -66,7 +66,11 @@ var DB *gorm.DB
 func InitDB(logger *xiaozhi_utils.Logger) (*gorm.DB, string, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		return nil, "", fmt.Errorf("环境变量 DATABASE_URL 未设置")
+		// return nil, "", fmt.Errorf("环境变量 DATABASE_URL 未设置")
+		db, err := gorm.Open(sqlite.Open("xiaozhi.db"), &gorm.Config{
+			Logger: &DBLogger{logger: logger},
+		})
+		return db, "sqlite", err
 	}
 
 	var (

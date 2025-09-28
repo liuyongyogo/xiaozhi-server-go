@@ -3,9 +3,13 @@ package utils
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +30,81 @@ const (
 const (
 	LogRetentionDays = 7 // 日志保留天数，硬编码7天
 )
+
+// ColoredTextHandler 自定义彩色文本处理器
+type ColoredTextHandler struct {
+	w     io.Writer
+	level slog.Level
+}
+
+func NewColoredTextHandler(w io.Writer, opts *slog.HandlerOptions) *ColoredTextHandler {
+	level := slog.LevelInfo
+	if opts != nil && opts.Level != nil {
+		level = opts.Level.Level()
+	}
+	return &ColoredTextHandler{
+		w:     w,
+		level: level,
+	}
+}
+
+func (h *ColoredTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.level
+}
+
+func (h *ColoredTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	// 简化实现，直接返回自身
+	return h
+}
+
+func (h *ColoredTextHandler) WithGroup(name string) slog.Handler {
+	// 简化实现，直接返回自身
+	return h
+}
+
+func (h *ColoredTextHandler) Handle(ctx context.Context, r slog.Record) error {
+	// 为不同级别添加颜色前缀
+	var colorPrefix string
+	switch r.Level {
+	case slog.LevelDebug:
+		colorPrefix = "\033[34m" // 蓝色
+	case slog.LevelInfo:
+		colorPrefix = "\033[32m" // 绿色
+	case slog.LevelWarn:
+		colorPrefix = "\033[33m" // 黄色
+	case slog.LevelError:
+		colorPrefix = "\033[31m" // 红色
+	default:
+		colorPrefix = ""
+	}
+
+	// 构建日志行
+	var attrs []string
+	r.Attrs(func(attr slog.Attr) bool {
+		attrs = append(attrs, fmt.Sprintf("%s=%v", attr.Key, attr.Value))
+		return true
+	})
+
+	// 格式化时间
+	timeStr := r.Time.Format("2006-01-02T15:04:05.000-07:00")
+
+	// 构建完整的日志行
+	logLine := fmt.Sprintf("time=%s level=%s msg=%s%s%s",
+		timeStr,
+		r.Level.String(),
+		colorPrefix, r.Message, "\033[0m")
+
+	// 添加属性
+	if len(attrs) > 0 {
+		logLine += " " + strings.Join(attrs, " ")
+	}
+
+	logLine += "\n"
+
+	// 直接写入
+	_, err := h.w.Write([]byte(logLine))
+	return err
+}
 
 // Logger 日志接口实现
 type Logger struct {
@@ -77,14 +156,14 @@ func NewLogger(config *configs.Config) (*Logger, error) {
 		Level: slogLevel,
 	})
 
-	// 创建文本处理器（用于控制台输出）
-	textHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	// 创建自定义的彩色文本处理器（用于控制台输出）
+	coloredTextHandler := NewColoredTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slogLevel,
 	})
 
 	// 创建logger实例
 	jsonLogger := slog.New(jsonHandler)
-	textLogger := slog.New(textHandler)
+	textLogger := slog.New(coloredTextHandler)
 
 	logger := &Logger{
 		config:      config,
@@ -170,6 +249,12 @@ func (l *Logger) rotateLogFile(newDate string) {
 	})
 	l.jsonLogger = slog.New(jsonHandler)
 
+	// 重新创建彩色文本处理器
+	coloredTextHandler := NewColoredTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slogLevel,
+	})
+	l.textLogger = slog.New(coloredTextHandler)
+
 	// 记录轮转信息
 	l.textLogger.Info("日志文件已轮转", slog.String("new_date", newDate))
 }
@@ -240,14 +325,34 @@ func (l *Logger) Close() error {
 	return nil
 }
 
+// getCallerInfo 获取调用位置信息
+func getCallerInfo(skip int) string {
+	_, fileName, line, ok := runtime.Caller(skip)
+	if !ok {
+		return "unknown"
+	}
+
+	// 获取包名和文件名
+	pkgName := path.Base(path.Dir(fileName))
+	baseFileName := path.Base(fileName)
+	filePath := path.Join(pkgName, baseFileName)
+
+	return " " + filePath + ":" + strconv.Itoa(line)
+}
+
 // log 通用日志记录函数（内部使用）
 func (l *Logger) log(level slog.Level, msg string, fields ...interface{}) {
 	// 使用读锁保护并发访问
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
+	// 获取调用位置信息
+	filePath := getCallerInfo(3) // 跳过log函数本身
+
 	// 构建slog属性
 	var attrs []slog.Attr
+	attrs = append(attrs, slog.String("file", filePath))
+
 	if len(fields) > 0 && fields[0] != nil {
 		// 处理fields参数
 		if fieldsMap, ok := fields[0].(map[string]interface{}); ok {
@@ -260,7 +365,7 @@ func (l *Logger) log(level slog.Level, msg string, fields ...interface{}) {
 		}
 	}
 
-	// 同时写入文件（JSON）和控制台（文本）
+	// 同时写入文件（JSON）和控制台（彩色文本）
 	ctx := context.Background()
 	l.jsonLogger.LogAttrs(ctx, level, msg, attrs...)
 	l.textLogger.LogAttrs(ctx, level, msg, attrs...)
@@ -268,14 +373,14 @@ func (l *Logger) log(level slog.Level, msg string, fields ...interface{}) {
 
 // Debug 记录调试级别日志
 func (l *Logger) Debug(msg string, args ...interface{}) {
-	if l.config.Log.LogLevel == "DEBUG" {
-		if len(args) > 0 && containsFormatPlaceholders(msg) {
-			formattedMsg := fmt.Sprintf(msg, args...)
-			l.log(slog.LevelDebug, formattedMsg)
-		} else {
-			l.log(slog.LevelDebug, msg, args...)
-		}
+	//if l.config.Log.LogLevel == "DEBUG" {
+	if len(args) > 0 && containsFormatPlaceholders(msg) {
+		formattedMsg := fmt.Sprintf(msg, args...)
+		l.log(slog.LevelDebug, formattedMsg)
+	} else {
+		l.log(slog.LevelDebug, msg, args...)
 	}
+	//}
 }
 
 func containsFormatPlaceholders(s string) bool {

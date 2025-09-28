@@ -106,7 +106,7 @@ func StartHttpServer(config *configs.Config, logger *utils.Logger, g *errgroup.G
 	router.SetTrustedProxies([]string{"0.0.0.0"})
 
 	// API路由全部挂载到/api前缀下
-	apiGroup := router.Group("/api")
+	apiGroup := router.Group("/xiaozhi")
 	// 启动OTA服务
 	otaService := ota.NewDefaultOTAService(config.Web.Websocket)
 	if err := otaService.Start(groupCtx, router, apiGroup); err != nil {

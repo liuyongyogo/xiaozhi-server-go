@@ -30,7 +30,7 @@ type Config struct {
 
 // Client 封装MCP客户端功能
 type Client struct {
-	client         *mcpclient.Client
+	//client      *mcpclient.Client
 	stdioClient    *mcpclient.Client
 	config         *Config
 	name           string
@@ -168,11 +168,11 @@ func (c *Client) Stop() {
 			c.logger.Info("Stopping MCP stdio client")
 			c.stdioClient.Close()
 		}
-	} else {
-		if c.client != nil {
-			c.logger.Info("Stopping MCP client")
-			c.client.Close()
-		}
+		// } else {
+		// 	if c.client != nil {
+		// 		c.logger.Info("Stopping MCP client")
+		// 		c.client.Close()
+		// 	}
 	}
 
 	c.mu.Lock()
