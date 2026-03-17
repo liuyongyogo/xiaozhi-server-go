@@ -43,7 +43,7 @@ func (p *Provider) ToTTS(text string) (string, error) {
 		return "", fmt.Errorf("创建输出目录失败 '%s': %v", outputDir, err)
 	}
 	// Use a unique filename
-	tempFile := filepath.Join(outputDir, fmt.Sprintf("edge_tts_go_%d.mp3", time.Now().UnixNano()))
+	tempFile := filepath.Join(outputDir, fmt.Sprintf("edge_tts_go_%v.mp3", time.Now().Format("2006-01-02_15_04_05_000000")))
 
 	// 配置 edge-tts-go 连接选项
 	connOptions := []edge_tts.CommunicateOption{

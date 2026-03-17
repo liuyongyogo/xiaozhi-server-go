@@ -51,6 +51,7 @@ func (h *ConnectionHandler) handleMessage(messageType int, message []byte) error
 
 // processClientTextMessage 处理文本数据
 func (h *ConnectionHandler) processClientTextMessage(ctx context.Context, text string) error {
+	h.logger.Warn(h.deviceID, fmt.Sprintf("✈️ ------收到客户端文本消息: %s", text))
 	// 解析JSON消息
 	var msgJSON interface{}
 	if err := json.Unmarshal([]byte(text), &msgJSON); err != nil {

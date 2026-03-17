@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -846,11 +845,11 @@ func (h *ConnectionHandler) deleteAudioFileIfNeeded(filepath string, reason stri
 	}
 
 	// 删除非缓存音频文件
-	if err := os.Remove(filepath); err != nil {
-		h.logger.Error(h.deviceID, fmt.Sprintf(reason+" 删除音频文件失败: %v", err))
-	} else {
-		h.logger.Debug(fmt.Sprintf(reason+" 已删除音频文件: %s", filepath))
-	}
+	// if err := os.Remove(filepath); err != nil {
+	// 	h.logger.Error(h.deviceID, fmt.Sprintf(reason+" 删除音频文件失败: %v", err))
+	// } else {
+	// 	h.logger.Debug(fmt.Sprintf(reason+" 已删除音频文件: %s", filepath))
+	// }
 }
 
 // processTTSTask 处理单个TTS任务
@@ -923,12 +922,13 @@ func (h *ConnectionHandler) SpeakAndPlay(text string, textIndex int, round int) 
 			textIndex int
 		}{text, round, textIndex}
 	}()
+	h.logger.Info("%s SpeakAndPlay 待合成语音: %s", h.deviceID, text)
 
 	originText := text // 保存原始文本用于日志
 	text = utils.RemoveAllEmoji(text)
 	text = utils.RemoveMarkdownSyntax(text) // 移除Markdown语法
 	if text == "" {
-		h.logger.Warn("SpeakAndPlay 收到空文本，无法合成语音, %d, text:%s.", textIndex, originText)
+		h.logger.Warn("SpeakAndPlay 收到空文本，无法合成语音!!!!!, %d, text:%s.", textIndex, originText)
 		return errors.New("收到空文本，无法合成语音")
 	}
 

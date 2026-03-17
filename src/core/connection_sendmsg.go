@@ -40,6 +40,7 @@ func (h *ConnectionHandler) sendHelloMessage() error {
 }
 
 func (h *ConnectionHandler) sendTTSMessage(state string, text string, textIndex int) error {
+	h.logger.Warn(h.deviceID, fmt.Sprintf("📖->🔉发送TTS状态消息: %s", state))
 	// 发送TTS状态结束通知
 	stateMsg := map[string]interface{}{
 		"type":        "tts",
@@ -109,6 +110,8 @@ func (h *ConnectionHandler) sendAudioMessage(filepath string, text string, textI
 		}
 	}()
 
+	h.logger.Info(h.deviceID, fmt.Sprintf("sendAudioMessage: 发送音频文件==============>: %s", filepath))
+
 	if len(filepath) == 0 {
 		return
 	}
@@ -141,6 +144,7 @@ func (h *ConnectionHandler) sendAudioMessage(filepath string, text string, textI
 			return
 		}
 	} else if h.serverAudioFormat == "opus" {
+		h.logger.Info(h.deviceID, "服务端音频格式为Opus，直接发送")
 		audioData, duration, err = utils.AudioToOpusData(filepath)
 		if err != nil {
 			h.logger.Error(h.deviceID, fmt.Sprintf("音频转Opus失败: %v", err))
