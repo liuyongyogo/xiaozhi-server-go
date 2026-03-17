@@ -201,11 +201,11 @@ func (p *Provider) validateAudioFormat(data []byte) error {
 	}
 
 	// 计算理论上的样本数
-	sampleCount := len(data) / 2
-	durationSeconds := float64(sampleCount) / float64(p.audioFs)
+	// sampleCount := len(data) / 2
+	// durationSeconds := float64(sampleCount) / float64(p.audioFs)
 
-	p.logger.Info("[DEBUG] 音频格式验证: 长度=%d字节, 样本数=%d, 理论时长=%.2f秒, 采样率=%dHz",
-		len(data), sampleCount, durationSeconds, p.audioFs)
+	// p.logger.Info("[DEBUG] 音频格式验证: 长度=%d字节, 样本数=%d, 理论时长=%.2f秒, 采样率=%dHz",
+	// 	len(data), sampleCount, durationSeconds, p.audioFs)
 
 	// 检查是否有静音或异常数据
 	silenceCount := 0
@@ -227,12 +227,12 @@ func (p *Provider) validateAudioFormat(data []byte) error {
 		}
 	}
 
-	silenceRatio := float64(silenceCount) / float64(sampleCount)
-	p.logger.Info("[DEBUG] 音频数据统计: 静音样本比例=%.2f%%, 最大振幅=%d", silenceRatio*100, maxValue)
+	// silenceRatio := float64(silenceCount) / float64(sampleCount)
+	// p.logger.Info("[DEBUG] 音频数据统计: 静音样本比例=%.2f%%, 最大振幅=%d", silenceRatio*100, maxValue)
 
-	if silenceRatio > 0.95 {
-		p.logger.Warn("[WARN] 音频数据几乎全部是静音，可能麦克风未工作或音量太低")
-	}
+	// if silenceRatio > 0.95 {
+	// 	p.logger.Warn("[WARN] 音频数据几乎全部是静音，可能麦克风未工作或音量太低")
+	// }
 
 	return nil
 }
@@ -295,10 +295,10 @@ func (p *Provider) AddAudioWithContext(ctx context.Context, data []byte) error {
 		}
 
 		// 记录音频数据信息用于调试
-		p.logger.Info("[DEBUG] AddAudioWithContext: 准备发送音频数据, 长度=%d 字节, 采样率=%dHz, 格式=%s", len(data), p.audioFs, p.wavFormat)
-		if len(data) >= 44 { // 检查是否可能是WAV格式
-			p.logger.Debug("[DEBUG] 音频数据前44字节: %x", data[:44])
-		}
+		// p.logger.Info("[DEBUG] AddAudioWithContext: 准备发送音频数据, 长度=%d 字节, 采样率=%dHz, 格式=%s", len(data), p.audioFs, p.wavFormat)
+		// if len(data) >= 44 { // 检查是否可能是WAV格式
+		// 	p.logger.Debug("[DEBUG] 音频数据前44字节: %x", data[:44])
+		// }
 
 		// 直接发送音频数据
 		if err := p.sendAudioData(data, false); err != nil {
@@ -448,9 +448,15 @@ func (p *Provider) ReadMessage() {
 			p.logger.Info("FunASR识别完成 (is_final=true)")
 		}
 
+		isPassOffline := false
+		if result["mode"].(string) == "2pass-offline" {
+			isPassOffline = true
+			p.logger.Info("FunASR识别完成 2pass-offline")
+		}
+
 		// 提取文本结果
 		text := ""
-		if textData, hasText := result["text"].(string); hasText {
+		if textData, hasText := result["text"].(string); hasText && isPassOffline {
 			text = textData
 		}
 
