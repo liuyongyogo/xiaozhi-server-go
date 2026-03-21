@@ -1,14 +1,18 @@
 package cosyvoice
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 	"xiaozhi-server-go/src/core/providers/tts"
 
-	"gitlab.yogorobot.com/yogostation/cardcc/log"
+	"xiaozhi-server-go/src/log"
 )
 
 // Provider Edge TTS提供者实现
@@ -23,17 +27,72 @@ func NewProvider(config *tts.Config, deleteFile bool) (*Provider, error) {
 		BaseProvider: base,
 	}, nil
 }
-func (p *Provider) ToTTS2(text string) (string, error) {
+
+type TtsInfo struct {
+	Text    string `json:"text"`
+	Speaker string `json:"speaker"`
+}
+
+func (p *Provider) ToTTS(text string) (string, error) {
+	// 创建临时文件路径用于保存 edgeTTS 生成的 MP3
+	outputDir := p.BaseProvider.Config().OutputDir
+	if outputDir == "" {
+		outputDir = os.TempDir() // Use system temp dir if not configured
+	}
 	//	curl -sX POST http://192.168.7.169:5000/tts \
 	//	  -H "Content-Type: application/json" \
 	//	  -d '{"text": "我是通义生成式语音大模型,我说话好听不？", "speaker": "中文女"}' \
 	//	  --output output.wav
-	return "", fmt.Errorf("NOT IMPLEMENTED")
+	url := "http://10.43.254.21:5000/tts"
+	tts := TtsInfo{
+		Text:    text,
+		Speaker: "中文女",
+	}
+	ttsjs, _ := json.Marshal(tts)
+	resp, erx := http.Post(url, "application/json", strings.NewReader(string(ttsjs)))
+	if erx != nil {
+		log.Error("PoserServer error:", erx)
+		return "", fmt.Errorf("edge-tts-go 获取音频流失败: %v", erx)
+	}
+	// defer resp.Body.Close()
+	body, er2 := io.ReadAll(resp.Body)
+	if er2 != nil {
+		log.Error("PostServer error:", er2)
+		return "", fmt.Errorf("edge-tts-go 获取音频流失败: %v", er2)
+	}
+	log.Infof("post_response size: %v", len(body))
+	resp.Body.Close()
+
+	tempwav := filepath.Join(outputDir, fmt.Sprintf("cosvoice_%v.wav", time.Now().Format("2006-01-02_15_04_05_000000")))
+
+	// 将音频数据写入临时文件
+	err := os.WriteFile(tempwav, body, 0644)
+	if err != nil {
+		return "", fmt.Errorf("写入音频文件 '%s' 失败: %v", tempwav, err)
+	}
+
+	// 检查文件是否成功创建
+	if _, err := os.Stat(tempwav); os.IsNotExist(err) {
+		return "", fmt.Errorf("edge-tts-go 未能创建音频文件: %s", tempwav)
+	}
+	//fmt.Printf("音频文件已生成: %s\n", tempFile)
+
+	tempFile := filepath.Join(outputDir, fmt.Sprintf("cosvoice_%v.mp3", time.Now().Format("2006-01-02_15_04_05_000000")))
+
+	cmd2 := exec.Command("lame", "--resample", "24", tempwav, tempFile, "--quiet")
+	if err := cmd2.Run(); err != nil {
+		return "", fmt.Errorf("执行 lame 命令失败：%v-> %v", err, cmd2.Args)
+	}
+
+	// Return the path to the generated audio file
+	return tempFile, nil
+
+	// return "", fmt.Errorf("NOT IMPLEMENTED")
 }
 
 // ToTTS 将文本转换为音频文件，并返回文件路径
 // 使用的edge库是github.com/wujunwei928/edge-tts-go，默认使用24k采样率
-func (p *Provider) ToTTS(text string) (string, error) {
+func (p *Provider) ToTTSMacosSay(text string) (string, error) {
 	// 获取配置的声音，如果未配置则使用默认值
 	// edgeTTSStartTime := time.Now()
 	voice := p.BaseProvider.Config().Voice

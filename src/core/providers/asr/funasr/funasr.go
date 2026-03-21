@@ -109,8 +109,8 @@ func NewProvider(config *asr.Config, deleteFile bool, logger *utils.Logger) (*Pr
 	provider := &Provider{
 		BaseProvider: base,
 		outputDir:    outputDir,
-		host:         "192.168.7.169",
-		wsURL:        "ws://192.168.7.169:10096/",
+		host:         "10.43.254.18",
+		wsURL:        "ws://10.43.254.18:10096/",
 		connectID:    connectID,
 		logger:       logger,
 
@@ -426,6 +426,13 @@ func (p *Provider) ReadMessage() {
 
 		messageType, response, err := conn.ReadMessage()
 		if err != nil {
+			// 检查是否是连接断开相关的错误
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "close 1006") ||
+				strings.Contains(errMsg, "abnormal closure") ||
+				strings.Contains(errMsg, "unexpected EOF") {
+				p.logger.Info("检测到服务端主动断开连接: %v", err)
+			}
 			p.setErrorAndStop(err)
 			return
 		}
@@ -508,13 +515,21 @@ func (p *Provider) setErrorAndStop(err error) {
 	p.logger.Warn("FunASR发生错误，停止识别: %v", err)
 	p.connMutex.Lock()
 	defer p.connMutex.Unlock()
+
+	// 避免重复设置错误状态
+	if !p.isStreaming {
+		return
+	}
+
 	p.err = err
 	p.isStreaming = false
 	errMsg := err.Error()
-	if strings.Contains(errMsg, "use of closed network connection") {
-		p.logger.Debug("setErrorAndStop: %v, sendDataCnt=%d", err, p.sendDataCnt)
+	if strings.Contains(errMsg, "use of closed network connection") ||
+		strings.Contains(errMsg, "close 1006") ||
+		strings.Contains(errMsg, "abnormal closure") {
+		p.logger.Debug("检测到连接断开: %v, sendDataCnt=%d", err, p.sendDataCnt)
 	} else {
-		p.logger.Error("setErrorAndStop: %v, sendDataCnt=%d", err, p.sendDataCnt)
+		p.logger.Error("其他WebSocket错误: %v, sendDataCnt=%d", err, p.sendDataCnt)
 	}
 
 	if p.conn != nil {
@@ -582,18 +597,35 @@ func (p *Provider) Reset() error {
 	p.connMutex.Lock()
 	defer p.connMutex.Unlock()
 
-	// 发送结束消息
-	if p.conn != nil && p.isStreaming {
+	// 先设置isStreaming为false，让ReadMessage协程退出
+	p.isStreaming = false
+
+	// 发送结束消息（如果连接仍然有效）
+	if p.conn != nil {
 		endMsg := map[string]interface{}{
 			"is_speaking": false,
 		}
 		endBytes, _ := json.Marshal(endMsg)
 		p.logger.Info("[DEBUG] 发送FunASR结束消息: %s", string(endBytes))
-		p.conn.WriteMessage(websocket.TextMessage, endBytes)
-		time.Sleep(100 * time.Millisecond) // 等待消息发送
+
+		// 使用goroutine和超时来避免阻塞和并发问题
+		done := make(chan error, 1)
+		go func() {
+			done <- p.conn.WriteMessage(websocket.TextMessage, endBytes)
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				p.logger.Debug("发送结束消息失败（连接可能已断开）: %v", err)
+			} else {
+				time.Sleep(100 * time.Millisecond) // 等待消息发送完成
+			}
+		case <-time.After(500 * time.Millisecond):
+			p.logger.Debug("发送结束消息超时，跳过")
+		}
 	}
 
-	p.isStreaming = false
 	p.closeConnection()
 
 	p.reqID = ""
