@@ -109,8 +109,8 @@ func NewProvider(config *asr.Config, deleteFile bool, logger *utils.Logger) (*Pr
 	provider := &Provider{
 		BaseProvider: base,
 		outputDir:    outputDir,
-		host:         "10.43.254.18",
-		wsURL:        "ws://10.43.254.18:10096/",
+		host:         "192.168.1.158",
+		wsURL:        "ws://192.168.1.158:10096/",
 		connectID:    connectID,
 		logger:       logger,
 

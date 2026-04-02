@@ -11,3 +11,5 @@ wake_replay
 config.db
 /ota_bin
 .config.yaml
+music/
+xiaozhi.db
