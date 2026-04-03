@@ -3,6 +3,7 @@ package openai
 import (
 	"xiaozhi-server-go/src/core/providers/vlllm"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 )
 
 // OpenAIVLLMProvider OpenAI类型的VLLLM提供者
@@ -19,7 +20,7 @@ func NewProvider(config *vlllm.Config, logger *utils.Logger) (*vlllm.Provider, e
 		return nil, err
 	}
 
-	logger.Debug("OpenAI VLLLM Provider创建成功 %v", map[string]interface{}{
+	log.Debugf("OpenAI VLLLM Provider创建成功 %v", map[string]interface{}{
 		"model_name": config.ModelName,
 		"base_url":   config.BaseURL,
 	})

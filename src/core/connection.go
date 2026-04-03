@@ -22,6 +22,7 @@ import (
 	"xiaozhi-server-go/src/core/providers/vlllm"
 	"xiaozhi-server-go/src/core/types"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 	"xiaozhi-server-go/src/task"
 
 	"github.com/google/uuid"
@@ -186,7 +187,7 @@ func NewConnectionHandler(
 		if key == "Session-Id" {
 			handler.sessionID = values[0] // 会话ID
 		}
-		logger.Info("HTTP头部信息: %s: %s", key, values[0])
+		log.Infof("HTTP头部信息: %s: %s", key, values[0])
 	}
 
 	if handler.sessionID == "" {
@@ -213,7 +214,7 @@ func NewConnectionHandler(
 		voiceName = getter.Config().Voice
 		handler.initailVoice = voiceName // 保存初始语音名称
 	}
-	logger.Info("使用TTS提供者: %s, 语音名称: %s", ttsProvider, voiceName)
+	log.Infof("使用TTS提供者: %s, 语音名称: %s", ttsProvider, voiceName)
 	handler.quickReplyCache = utils.NewQuickReplyCache(ttsProvider, voiceName)
 
 	// 初始化对话管理器
@@ -231,7 +232,7 @@ func (h *ConnectionHandler) SetTaskCallback(callback func(func(*ConnectionHandle
 
 func (h *ConnectionHandler) SubmitTask(taskType string, params map[string]interface{}) {
 	_task, id := task.NewTask(h.ctx, "", params)
-	h.logger.Info(h.deviceID, fmt.Sprintf("提交任务: %s, ID: %s, 参数: %v", _task.Type, id, params))
+	log.Infof("[%v] 提交任务: %s, ID: %s, 参数: %v", h.deviceID, _task.Type, id, params)
 	// 创建安全回调用于任务完成时调用
 	var taskCallback func(result interface{})
 	if h.safeCallbackFunc != nil {
@@ -253,19 +254,19 @@ func (h *ConnectionHandler) SubmitTask(taskType string, params map[string]interf
 }
 
 func (h *ConnectionHandler) handleTaskComplete(task *task.Task, id string, result interface{}) {
-	h.logger.Info(h.deviceID, fmt.Sprintf("任务 %s 完成，ID: %s, %v", task.Type, id, result))
+	log.Infof("[%v] 任务 %s 完成，ID: %s, %v", h.deviceID, task.Type, id, result)
 }
 
 func (h *ConnectionHandler) LogInfo(msg string) {
 	if h.logger != nil {
-		h.logger.Info(msg, map[string]interface{}{
+		log.Infof(msg, map[string]interface{}{
 			"device": h.deviceID,
 		})
 	}
 }
 func (h *ConnectionHandler) LogError(msg string) {
 	if h.logger != nil {
-		h.logger.Error(msg, map[string]interface{}{
+		log.Errorf(msg, map[string]interface{}{
 			"device": h.deviceID,
 		})
 	}
@@ -285,11 +286,11 @@ func (h *ConnectionHandler) Handle(conn Connection) {
 
 	// 优化后的MCP管理器处理
 	if h.mcpManager == nil {
-		h.logger.Error(h.deviceID, "没有可用的MCP管理器")
+		log.Errorf(h.deviceID, "没有可用的MCP管理器")
 		return
 
 	} else {
-		h.logger.Info(h.deviceID, "使用从资源池获取的MCP管理器，开始绑定连接")
+		log.Infof("[%v]使用从资源池获取的MCP管理器，开始绑定连接", h.deviceID)
 		// 池化的管理器已经预初始化，只需要绑定连接
 		params := map[string]interface{}{
 			"session_id": h.sessionID,
@@ -298,14 +299,14 @@ func (h *ConnectionHandler) Handle(conn Connection) {
 			"client_id":  h.clientId,
 			"token":      h.config.Server.Token,
 		}
-		h.logger.Info("MCP管理器绑定参数: sessionID=%s, deviceID=%s, clientID=%s", h.sessionID, h.deviceID, h.clientId)
+		log.Infof("MCP管理器绑定参数: sessionID=%s, deviceID=%s, clientID=%s", h.sessionID, h.deviceID, h.clientId)
 
 		if err := h.mcpManager.BindConnection(conn, h.functionRegister, params); err != nil {
-			h.logger.Error(h.deviceID, fmt.Sprintf("绑定MCP管理器连接失败: %v", err))
+			log.Errorf("[%v] 绑定MCP管理器连接失败: %v", h.deviceID, err)
 			return
 		}
 		// 不需要重新初始化服务器，只需要确保连接相关的服务正常
-		h.logger.Info(h.deviceID, "MCP管理器连接绑定完成，等待客户端MCP响应")
+		log.Infof("[%v] MCP管理器连接绑定完成，等待客户端MCP响应", h.deviceID)
 	}
 
 	// 主消息循环
@@ -316,12 +317,12 @@ func (h *ConnectionHandler) Handle(conn Connection) {
 		default:
 			messageType, message, err := conn.ReadMessage()
 			if err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("读取消息失败: %v", err))
+				log.Errorf("[%v] 读取消息失败: %v", h.deviceID, err)
 				return
 			}
 
 			if err := h.handleMessage(messageType, message); err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("处理消息失败: %v", err))
+				log.Errorf("[%v] 处理消息失败: %v", h.deviceID, err)
 			}
 		}
 	}
@@ -335,7 +336,7 @@ func (h *ConnectionHandler) processClientTextMessagesCoroutine() {
 			return
 		case text := <-h.clientTextQueue:
 			if err := h.processClientTextMessage(context.Background(), text); err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("处理文本数据失败: %v", err))
+				log.Errorf("[%v] 处理文本数据失败: %v", h.deviceID, err)
 			}
 		}
 	}
@@ -352,7 +353,7 @@ func (h *ConnectionHandler) processClientAudioMessagesCoroutine() {
 				continue
 			}
 			if err := h.providers.asr.AddAudio(audioData); err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("处理音频数据失败: %v", err))
+				log.Errorf("[%v] 处理音频数据失败: %v", h.deviceID, err)
 			}
 		}
 	}
@@ -372,9 +373,9 @@ func (h *ConnectionHandler) sendAudioMessageCoroutine() {
 // OnAsrResult 实现 AsrEventListener 接口
 // 返回true则停止语音识别，返回false会继续语音识别
 func (h *ConnectionHandler) OnAsrResult(result string) bool {
-	//h.logger.Info(h.deviceID+fmt.Sprintf("[%s] ASR识别结果: %s", h.clientListenMode, result))
+	//log.Infof(h.deviceID+fmt.Sprintf("[%s] ASR识别结果: %s", h.clientListenMode, result))
 	if h.providers.asr.GetSilenceCount() >= 2 {
-		h.logger.Info(h.deviceID, "检测到连续两次静音，结束对话")
+		log.Infof(h.deviceID, "检测到连续两次静音，结束对话")
 		h.closeAfterChat = true // 如果连续两次静音，则结束对话
 		result = "长时间未检测到用户说话，请礼貌的结束对话"
 	}
@@ -382,13 +383,13 @@ func (h *ConnectionHandler) OnAsrResult(result string) bool {
 		if result == "" {
 			return false
 		}
-		h.logger.Info(h.deviceID, fmt.Sprintf("[%s] ASR识别结果: %s", h.clientListenMode, result))
+		log.Infof("[%v] [%s] ASR识别结果: %s", h.deviceID, h.clientListenMode, result)
 		h.handleChatMessage(context.Background(), result)
 		return true
 	} else if h.clientListenMode == "manual" {
 		h.client_asr_text += result
 		if result != "" {
-			h.logger.Info(h.deviceID, fmt.Sprintf("[%s] ASR识别结果: %s", h.clientListenMode, h.client_asr_text))
+			log.Infof("[%v] [%s] ASR识别结果: %s", h.deviceID, h.clientListenMode, h.client_asr_text)
 		}
 		if h.clientVoiceStop {
 			h.handleChatMessage(context.Background(), h.client_asr_text)
@@ -401,7 +402,7 @@ func (h *ConnectionHandler) OnAsrResult(result string) bool {
 		}
 		h.stopServerSpeak()
 		h.providers.asr.Reset() // 重置ASR状态，准备下一次识别
-		h.logger.Info(h.deviceID, fmt.Sprintf("[%s] ASR识别结果: %s", h.clientListenMode, result))
+		log.Infof("[%v] [%s] ASR识别结果: %s", h.deviceID, h.clientListenMode, result)
 		h.handleChatMessage(context.Background(), result)
 		return true
 	}
@@ -410,7 +411,7 @@ func (h *ConnectionHandler) OnAsrResult(result string) bool {
 
 // clientAbortChat 处理中止消息
 func (h *ConnectionHandler) clientAbortChat() error {
-	h.logger.Info(h.deviceID, "收到客户端中止消息，停止语音识别")
+	log.Infof(h.deviceID, "收到客户端中止消息，停止语音识别")
 	h.stopServerSpeak()
 	h.sendTTSMessage("stop", "", 0)
 	h.clearSpeakStatus()
@@ -426,10 +427,10 @@ func (h *ConnectionHandler) QuitIntent(text string) bool {
 	cleand_text := utils.RemoveAllPunctuation(text) // 移除标点符号，确保匹配准确
 	// 检查是否包含退出命令
 	for _, cmd := range exitCommands {
-		h.logger.Debug(fmt.Sprintf("检查退出命令: %s,%s", cmd, cleand_text))
+		log.Debugf("检查退出命令: %s,%s", cmd, cleand_text)
 		//判断相等
 		if cleand_text == cmd {
-			h.logger.Info(h.deviceID, "收到客户端退出意图，准备结束对话")
+			log.Infof(h.deviceID, "收到客户端退出意图，准备结束对话")
 			h.Close() // 直接关闭连接
 			return true
 		}
@@ -457,7 +458,7 @@ func (h *ConnectionHandler) quickReplyWakeUpWords(text string) bool {
 // handleChatMessage 处理聊天消息
 func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) error {
 	if text == "" {
-		h.logger.Warn("收到空聊天消息，忽略")
+		log.Warn("收到空聊天消息，忽略")
 		h.clientAbortChat()
 		return fmt.Errorf("聊天消息为空")
 	}
@@ -470,15 +471,15 @@ func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) 
 	h.talkRound++
 	h.roundStartTime = time.Now()
 	currentRound := h.talkRound
-	h.logger.Info(h.deviceID, fmt.Sprintf("开始新的对话轮次: %d", currentRound))
+	log.Infof("[%v] 开始新的对话轮次: %d", h.deviceID, currentRound)
 
 	// 判断是否需要验证
 	if h.isNeedAuth() {
 		if err := h.checkAndBroadcastAuthCode(); err != nil {
-			h.logger.Error(fmt.Sprintf("检查认证码失败: %v", err))
+			log.Errorf("检查认证码失败: %v", err)
 			return err
 		}
-		h.logger.Info(h.deviceID, "设备未认证，等待管理员认证")
+		log.Infof(h.deviceID, "设备未认证，等待管理员认证")
 		return nil
 	}
 
@@ -486,23 +487,23 @@ func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) 
 	// 立即发送 stt 消息
 	err := h.sendSTTMessage(text)
 	if err != nil {
-		h.logger.Error(h.deviceID, fmt.Sprintf("发送STT消息失败: %v", err))
+		log.Errorf("[%v] 发送STT消息失败: %v", h.deviceID, err)
 		return fmt.Errorf("发送STT消息失败: %v", err)
 	}
 
 	// 发送tts start状态
 	if err := h.sendTTSMessage("start", "", 0); err != nil {
-		h.logger.Error(h.deviceID, fmt.Sprintf("发送TTS开始状态失败: %v", err))
+		log.Errorf("[%v] 发送TTS开始状态失败: %v", h.deviceID, err)
 		return fmt.Errorf("发送TTS开始状态失败: %v", err)
 	}
 
 	// 发送思考状态的情绪
 	if err := h.sendEmotionMessage("thinking"); err != nil {
-		h.logger.Error(h.deviceID, fmt.Sprintf("发送思考状态情绪消息失败: %v", err))
+		log.Errorf("[%v] 发送思考状态情绪消息失败: %v", h.deviceID, err)
 		return fmt.Errorf("发送情绪消息失败: %v", err)
 	}
 
-	h.logger.Info(h.deviceID, "收到聊天消息: "+text)
+	log.Infof("[%v] 收到聊天消息: %v", h.deviceID, text)
 
 	if h.quickReplyWakeUpWords(text) {
 		return nil
@@ -520,7 +521,7 @@ func (h *ConnectionHandler) handleChatMessage(ctx context.Context, text string) 
 func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []providers.Message, round int) error {
 	defer func() {
 		if r := recover(); r != nil {
-			h.logger.Error(h.deviceID, fmt.Sprintf("genResponseByLLM发生panic: %v", r))
+			log.Errorf("[%v] genResponseByLLM发生panic: %v", h.deviceID, r)
 			errorMsg := "抱歉，处理您的请求时发生了错误"
 			h.tts_last_text_index = 1 // 重置文本索引
 			h.SpeakAndPlay(errorMsg, 1, round)
@@ -528,7 +529,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 	}()
 
 	llmStartTime := time.Now()
-	//h.logger.Info("开始生成LLM回复, round:%d ", round)
+	//log.Infof("开始生成LLM回复, round:%d ", round)
 	for _, msg := range messages {
 		_ = msg
 		//msg.Print()
@@ -559,7 +560,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 		toolCall := response.ToolCalls
 
 		if response.Error != "" {
-			h.logger.Error(h.deviceID, fmt.Sprintf("LLM响应错误: %s", response.Error))
+			log.Errorf("[%v] LLM响应错误: %s", h.deviceID, response.Error)
 			errorMsg := "抱歉，服务暂时不可用，请稍后再试"
 			h.tts_last_text_index = 1 // 重置文本索引
 			h.SpeakAndPlay(errorMsg, 1, round)
@@ -590,7 +591,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 
 		if content != "" {
 			if strings.Contains(content, "服务响应异常") {
-				h.logger.Error(h.deviceID, fmt.Sprintf("检测到LLM服务异常: %s", content))
+				log.Errorf("[%v] 检测到LLM服务异常: %s", h.deviceID, content)
 				errorMsg := "抱歉，服务暂时不可用，请稍后再试"
 				h.tts_last_text_index = 1 // 重置文本索引
 				h.SpeakAndPlay(errorMsg, 1, round)
@@ -605,7 +606,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 			// 处理分段
 			fullText := utils.JoinStrings(responseMessage)
 			if len(fullText) <= processedChars {
-				h.logger.Warn(fmt.Sprintf("文本处理异常: fullText长度=%d, processedChars=%d", len(fullText), processedChars))
+				log.Warn(fmt.Sprintf("文本处理异常: fullText长度=%d, processedChars=%d", len(fullText), processedChars))
 				continue
 			}
 			currentText := fullText[processedChars:]
@@ -616,14 +617,14 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 				if textIndex == 1 {
 					now := time.Now()
 					llmSpentTime := now.Sub(llmStartTime)
-					h.logger.Info(h.deviceID, fmt.Sprintf("LLM回复耗时 %s 生成第一句话【%s】, round: %d", llmSpentTime, segment, round))
+					log.Infof("[%v] LLM回复耗时 %s 生成第一句话, round: %d, %s", h.deviceID, llmSpentTime, round, segment)
 				} else {
-					h.logger.Info(h.deviceID, fmt.Sprintf("LLM回复分段: %s, index: %d, round:%d", segment, textIndex, round))
+					log.Infof("[%v] LLM回复分段: index: %d, round:%d, %s", h.deviceID, textIndex, round, segment)
 				}
 				h.tts_last_text_index = textIndex
 				err := h.SpeakAndPlay(segment, textIndex, round)
 				if err != nil {
-					h.logger.Error(h.deviceID, fmt.Sprintf("播放LLM回复分段失败: %v", err))
+					log.Errorf("[%v] 播放LLM回复分段失败: %v", h.deviceID, err)
 				}
 				processedChars += chars
 			}
@@ -638,7 +639,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 				functionName = a["name"].(string)
 				argumentsJson, err := json.Marshal(a["arguments"])
 				if err != nil {
-					h.logger.Error(h.deviceID, fmt.Sprintf("函数调用参数解析失败: %v", err))
+					log.Errorf("[%v] 函数调用参数解析失败: %v", h.deviceID, err)
 				}
 				functionArguments = string(argumentsJson)
 				functionID = uuid.New().String()
@@ -646,7 +647,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 				bHasError = true
 			}
 			if bHasError {
-				h.logger.Error(h.deviceID, fmt.Sprintf("函数调用参数解析失败: %v", err))
+				log.Errorf("[%v] 函数调用参数解析失败: %v", h.deviceID, err)
 			}
 		}
 		if !bHasError {
@@ -654,19 +655,19 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 			responseMessage = []string{}
 			arguments := make(map[string]interface{})
 			if err := json.Unmarshal([]byte(functionArguments), &arguments); err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("函数调用参数解析失败: %v", err))
+				log.Errorf("[%v] 函数调用参数解析失败: %v", h.deviceID, err)
 			}
 			functionCallData := map[string]interface{}{
 				"id":        functionID,
 				"name":      functionName,
 				"arguments": functionArguments,
 			}
-			h.logger.Info(h.deviceID, fmt.Sprintf("函数调用: %v", arguments))
+			log.Infof("[%v] 函数调用: %v", h.deviceID, arguments)
 			if h.mcpManager.IsMCPTool(functionName) {
 				// 处理MCP函数调用
 				result, err := h.mcpManager.ExecuteTool(ctx, functionName, arguments)
 				if err != nil {
-					h.logger.Error(h.deviceID, fmt.Sprintf("MCP函数调用失败: %v", err))
+					log.Errorf("[%v] MCP函数调用失败: %v", h.deviceID, err)
 					if result == nil {
 						result = "MCP工具调用失败"
 					}
@@ -675,7 +676,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 				if actionResult, ok := result.(types.ActionResponse); ok {
 					h.handleFunctionResult(actionResult, functionCallData, textIndex)
 				} else {
-					h.logger.Info(h.deviceID, fmt.Sprintf("MCP函数调用结果: %v", result))
+					log.Infof("[%v] MCP函数调用结果: %v", h.deviceID, result)
 					actionResult := types.ActionResponse{
 						Action: types.ActionTypeReqLLM, // 动作类型
 						Result: result,                 // 动作产生的结果
@@ -696,12 +697,12 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 		remainingText := fullResponse[processedChars:]
 		if remainingText != "" {
 			textIndex++
-			h.logger.Info(h.deviceID, fmt.Sprintf("LLM回复分段[剩余文本]: %s, index: %d, round:%d", remainingText, textIndex, round))
+			log.Infof("[%v] LLM回复分段[剩余文本]: %s, index: %d, round:%d", h.deviceID, remainingText, textIndex, round)
 			h.tts_last_text_index = textIndex
 			h.SpeakAndPlay(remainingText, textIndex, round)
 		}
 	} else {
-		h.logger.Debug("无剩余文本需要处理: fullResponse长度=%d, processedChars=%d", len(fullResponse), processedChars)
+		log.Debugf("无剩余文本需要处理: fullResponse长度=%d, processedChars=%d", len(fullResponse), processedChars)
 	}
 
 	// 分析回复并发送相应的情绪
@@ -721,27 +722,27 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 func (h *ConnectionHandler) handleFunctionResult(result types.ActionResponse, functionCallData map[string]interface{}, textIndex int) {
 	switch result.Action {
 	case types.ActionTypeError:
-		h.logger.Error(h.deviceID, fmt.Sprintf("函数调用错误: %v", result.Result))
+		log.Errorf("[%v] 函数调用错误: %v", h.deviceID, result.Result)
 	case types.ActionTypeNotFound:
-		h.logger.Error(h.deviceID, fmt.Sprintf("函数未找到: %v", result.Result))
+		log.Errorf("[%v] 函数未找到: %v", h.deviceID, result.Result)
 	case types.ActionTypeNone:
-		h.logger.Info(h.deviceID, fmt.Sprintf("函数调用无操作: %v", result.Result))
+		log.Infof("[%v] 函数调用无操作: %v", h.deviceID, result.Result)
 	case types.ActionTypeResponse:
-		h.logger.Info(h.deviceID, fmt.Sprintf("函数调用直接回复: %v", result.Response))
+		log.Infof("[%v] 函数调用直接回复: %v", h.deviceID, result.Response)
 		h.SystemSpeak(result.Response.(string))
 	case types.ActionTypeCallHandler:
 		h.handleMCPResultCall(result)
 	case types.ActionTypeReqLLM:
-		h.logger.Info(h.deviceID, fmt.Sprintf("函数调用后请求LLM: %v", result.Result))
+		log.Infof("[%v] 函数调用后请求LLM: %v", h.deviceID, result.Result)
 		text, ok := result.Result.(string)
 		if ok && len(text) > 0 {
 			functionID := functionCallData["id"].(string)
 			functionName := functionCallData["name"].(string)
 			functionArguments := functionCallData["arguments"].(string)
-			h.logger.Info(h.deviceID, fmt.Sprintf("函数调用结果: %s", text))
-			h.logger.Info(h.deviceID, fmt.Sprintf("函数调用参数: %s", functionArguments))
-			h.logger.Info(h.deviceID, fmt.Sprintf("函数调用名称: %s", functionName))
-			h.logger.Info(h.deviceID, fmt.Sprintf("函数调用ID: %s", functionID))
+			log.Infof("[%v] 函数调用结果: %s", h.deviceID, text)
+			log.Infof("[%v] 函数调用参数: %s", h.deviceID, functionArguments)
+			log.Infof("[%v] 函数调用名称: %s", h.deviceID, functionName)
+			log.Infof("[%v] 函数调用ID: %s", h.deviceID, functionID)
 
 			// 添加 assistant 消息，包含 tool_calls
 			h.dialogueManager.Put(chat.Message{
@@ -770,7 +771,7 @@ func (h *ConnectionHandler) handleFunctionResult(result types.ActionResponse, fu
 			h.genResponseByLLM(context.Background(), h.dialogueManager.GetLLMDialogue(), h.talkRound)
 
 		} else {
-			h.logger.Error(h.deviceID, fmt.Sprintf("函数调用结果解析失败: %v", result.Result))
+			log.Errorf("[%v] 函数调用结果解析失败: %v", h.deviceID, result.Result)
 			// 发送错误消息
 			errorMessage := fmt.Sprintf("函数调用结果解析失败 %v", result.Result)
 			h.SystemSpeak(errorMessage)
@@ -780,7 +781,7 @@ func (h *ConnectionHandler) handleFunctionResult(result types.ActionResponse, fu
 
 func (h *ConnectionHandler) SystemSpeak(text string) error {
 	if text == "" {
-		h.logger.Warn("SystemSpeak 收到空文本，无法合成语音")
+		log.Warn("SystemSpeak 收到空文本，无法合成语音")
 		return errors.New("收到空文本，无法合成语音")
 	}
 	texts := utils.SplitByPunctuation(text)
@@ -822,7 +823,7 @@ func (h *ConnectionHandler) processTTSQueueCoroutine() {
 
 // 服务端打断说话
 func (h *ConnectionHandler) stopServerSpeak() {
-	h.logger.Info(h.deviceID, "服务端停止说话")
+	log.Infof(h.deviceID, "服务端停止说话")
 	atomic.StoreInt32(&h.serverVoiceStop, 1)
 	h.cleanTTSAndAudioQueue(false)
 }
@@ -834,21 +835,21 @@ func (h *ConnectionHandler) deleteAudioFileIfNeeded(filepath string, reason stri
 
 	// 检查是否为快速回复缓存文件，如果是则不删除
 	if h.quickReplyCache != nil && h.quickReplyCache.IsCachedFile(filepath) {
-		h.logger.Info(h.deviceID, fmt.Sprintf(reason+" 跳过删除缓存音频文件: %s", filepath))
+		log.Infof(h.deviceID, fmt.Sprintf(reason+" 跳过删除缓存音频文件: %s", filepath))
 		return
 	}
 
 	// 检查是否是音乐文件，如果是则不删除
 	if utils.IsMusicFile(filepath) {
-		h.logger.Info(h.deviceID, fmt.Sprintf(reason+" 跳过删除音乐文件: %s", filepath))
+		log.Infof(h.deviceID, fmt.Sprintf(reason+" 跳过删除音乐文件: %s", filepath))
 		return
 	}
 
 	// 删除非缓存音频文件
 	// if err := os.Remove(filepath); err != nil {
-	// 	h.logger.Error(h.deviceID, fmt.Sprintf(reason+" 删除音频文件失败: %v", err))
+	// 	log.Errorf(h.deviceID, fmt.Sprintf(reason+" 删除音频文件失败: %v", err))
 	// } else {
-	// 	h.logger.Debug(fmt.Sprintf(reason+" 已删除音频文件: %s", filepath))
+	// 	log.Infof(reason+" 已删除音频文件: %s", filepath))
 	// }
 }
 
@@ -867,7 +868,7 @@ func (h *ConnectionHandler) processTTSTask(text string, textIndex int, round int
 	if utils.IsQuickReplyHit(text, h.config.QuickReplyWords) {
 		// 尝试从缓存查找音频文件
 		if cachedFile := h.quickReplyCache.FindCachedAudio(text); cachedFile != "" {
-			h.logger.Info(h.deviceID, fmt.Sprintf("使用缓存的快速回复音频: %s", cachedFile))
+			log.Infof("[%v] 使用缓存的快速回复音频: %s", h.deviceID, cachedFile)
 			filepath = cachedFile
 			return
 		}
@@ -877,28 +878,28 @@ func (h *ConnectionHandler) processTTSTask(text string, textIndex int, round int
 	text = utils.RemoveAllEmoji(text)
 
 	if text == "" {
-		h.logger.Warn(fmt.Sprintf("收到空文本，无法合成语音, 索引: %d", textIndex))
+		log.Warn(fmt.Sprintf("收到空文本，无法合成语音, 索引: %d", textIndex))
 		return
 	}
 
 	// 生成语音文件
 	filepath, err := h.providers.tts.ToTTS(text)
 	if err != nil {
-		h.logger.Error(h.deviceID, fmt.Sprintf("TTS转换失败:text(%s) %v", text, err))
+		log.Errorf("[%v] TTS转换失败:text(%s) %v", h.deviceID, text, err)
 		return
 	} else {
-		h.logger.Debug(fmt.Sprintf("TTS转换成功: text(%s), index(%d) %s", text, textIndex, filepath))
+		log.Debugf("[%v] TTS转换成功: text(%s), index(%d) %s", h.deviceID, text, textIndex, filepath)
 		// 如果是快速回复词，保存到缓存
 		if utils.IsQuickReplyHit(text, h.config.QuickReplyWords) {
 			if err := h.quickReplyCache.SaveCachedAudio(text, filepath); err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("保存快速回复音频失败: %v", err))
+				log.Errorf("[%v] 保存快速回复音频失败: %v", h.deviceID, err)
 			} else {
-				h.logger.Info(h.deviceID, fmt.Sprintf("成功缓存快速回复音频: %s", text))
+				log.Infof("[%v] 成功缓存快速回复音频: %s", h.deviceID, text)
 			}
 		}
 	}
 	if atomic.LoadInt32(&h.serverVoiceStop) == 1 { // 服务端语音停止
-		h.logger.Info(h.deviceID, fmt.Sprintf("processTTSTask 服务端语音停止, 不再发送音频数据：%s", text))
+		log.Infof("[%v] processTTSTask 服务端语音停止, 不再发送音频数据：%s", h.deviceID, text)
 		// 服务端语音停止时，根据配置删除已生成的音频文件
 		h.deleteAudioFileIfNeeded(filepath, "服务端语音停止时")
 		return
@@ -907,7 +908,7 @@ func (h *ConnectionHandler) processTTSTask(text string, textIndex int, round int
 	if textIndex == 1 {
 		now := time.Now()
 		ttsSpentTime := now.Sub(ttsStartTime)
-		h.logger.Debug(fmt.Sprintf("TTS转换耗时: %s, 文本: %s, 索引: %d", ttsSpentTime, text, textIndex))
+		log.Infof("TTS转换耗时: %s, 文本: %s, 索引: %d", ttsSpentTime, text, textIndex)
 	}
 
 }
@@ -922,24 +923,24 @@ func (h *ConnectionHandler) SpeakAndPlay(text string, textIndex int, round int) 
 			textIndex int
 		}{text, round, textIndex}
 	}()
-	h.logger.Info("%s SpeakAndPlay 待合成语音: %s", h.deviceID, text)
+	// log.Infof("[%v] SpeakAndPlay 待合成语音: %s", h.deviceID, text)
 
 	originText := text // 保存原始文本用于日志
 	text = utils.RemoveAllEmoji(text)
 	text = utils.RemoveMarkdownSyntax(text) // 移除Markdown语法
 	if text == "" {
-		h.logger.Warn("SpeakAndPlay 收到空文本，无法合成语音!!!!!, %d, text:%s.", textIndex, originText)
+		log.Warnf("SpeakAndPlay 收到空文本，无法合成语音!!!!!, %d, text:%s.", textIndex, originText)
 		return errors.New("收到空文本，无法合成语音")
 	}
 
 	if atomic.LoadInt32(&h.serverVoiceStop) == 1 { // 服务端语音停止
-		h.logger.Info(h.deviceID, fmt.Sprintf("speakAndPlay 服务端语音停止, 不再发送音频数据：%s", text))
+		log.Infof("[%v] speakAndPlay 服务端语音停止, 不再发送音频数据：%s", h.deviceID, text)
 		text = ""
 		return errors.New("服务端语音已停止，无法合成语音")
 	}
 
 	if len(text) > 255 {
-		h.logger.Warn(fmt.Sprintf("文本过长，超过255字符限制，截断合成语音: %s", text))
+		log.Warnf("文本过长，超过255字符限制，截断合成语音: %s", text)
 		text = text[:255] // 截断文本
 	}
 
@@ -947,7 +948,7 @@ func (h *ConnectionHandler) SpeakAndPlay(text string, textIndex int, round int) 
 }
 
 func (h *ConnectionHandler) clearSpeakStatus() {
-	h.logger.Info(h.deviceID, "清除服务端讲话状态 ")
+	log.Infof("[%v] 清除服务端讲话状态 ", h.deviceID)
 	h.tts_last_text_index = -1
 	h.providers.asr.Reset() // 重置ASR状态
 }
@@ -955,7 +956,7 @@ func (h *ConnectionHandler) clearSpeakStatus() {
 func (h *ConnectionHandler) closeOpusDecoder() {
 	if h.opusDecoder != nil {
 		if err := h.opusDecoder.Close(); err != nil {
-			h.logger.Error(h.deviceID, fmt.Sprintf("关闭Opus解码器失败: %v", err))
+			log.Errorf("[%v] 关闭Opus解码器失败: %v", h.deviceID, err)
 		}
 		h.opusDecoder = nil
 	}
@@ -970,10 +971,10 @@ func (h *ConnectionHandler) cleanTTSAndAudioQueue(bClose bool) error {
 	for {
 		select {
 		case task := <-h.ttsQueue:
-			h.logger.Info(h.deviceID, fmt.Sprintf(msgPrefix+"丢弃一个TTS任务: %s", task.text))
+			log.Infof(h.deviceID, fmt.Sprintf(msgPrefix+"丢弃一个TTS任务: %s", task.text))
 		default:
 			// 队列已清空，退出循环
-			h.logger.Info(h.deviceID, msgPrefix+"ttsQueue队列已清空，停止处理TTS任务,准备清空音频队列")
+			log.Infof("[%v] %v ttsQueue队列已清空，停止处理TTS任务,准备清空音频队列", h.deviceID, msgPrefix)
 			goto clearAudioQueue
 		}
 	}
@@ -983,12 +984,12 @@ clearAudioQueue:
 	for {
 		select {
 		case task := <-h.audioMessagesQueue:
-			h.logger.Info(h.deviceID, fmt.Sprintf(msgPrefix+"丢弃一个音频任务: %s", task.text))
+			log.Infof(h.deviceID, fmt.Sprintf(msgPrefix+"丢弃一个音频任务: %s", task.text))
 			// 根据配置删除被丢弃的音频文件
 			h.deleteAudioFileIfNeeded(task.filepath, msgPrefix+"丢弃音频任务时")
 		default:
 			// 队列已清空，退出循环
-			h.logger.Info(h.deviceID, msgPrefix+"audioMessagesQueue队列已清空，停止处理音频任务")
+			log.Infof("[%v] %v audioMessagesQueue队列已清空，停止处理音频任务", h.deviceID, msgPrefix)
 			return nil
 		}
 	}
@@ -1005,7 +1006,7 @@ func (h *ConnectionHandler) Close() {
 		}
 		if h.providers.asr != nil {
 			if err := h.providers.asr.Reset(); err != nil {
-				h.logger.Error(h.deviceID, fmt.Sprintf("重置ASR状态失败: %v", err))
+				log.Errorf("[%v] 重置ASR状态失败: %v", h.deviceID, err)
 			}
 		}
 		h.cleanTTSAndAudioQueue(true)
@@ -1014,7 +1015,7 @@ func (h *ConnectionHandler) Close() {
 
 // genResponseByVLLM 使用VLLLM处理包含图片的消息
 func (h *ConnectionHandler) genResponseByVLLM(ctx context.Context, messages []providers.Message, imageData image.ImageData, text string, round int) error {
-	h.logger.Info("开始生成VLLLM回复 %v", map[string]interface{}{
+	log.Infof("开始生成VLLLM回复 %v", map[string]interface{}{
 		"text":          text,
 		"has_url":       imageData.URL != "",
 		"has_data":      imageData.Data != "",
@@ -1025,7 +1026,7 @@ func (h *ConnectionHandler) genResponseByVLLM(ctx context.Context, messages []pr
 	// 使用VLLLM处理图片和文本
 	responses, err := h.providers.vlllm.ResponseWithImage(ctx, h.sessionID, messages, imageData, text)
 	if err != nil {
-		h.logger.Error(h.deviceID, fmt.Sprintf("VLLLM生成回复失败，尝试降级到普通LLM: %v", err))
+		log.Errorf("[%v] VLLLM生成回复失败，尝试降级到普通LLM: %v", h.deviceID, err)
 		// 降级策略：只使用文本部分调用普通LLM
 		fallbackText := fmt.Sprintf("用户发送了一张图片并询问：%s（注：当前无法处理图片，只能根据文字回答）", text)
 		fallbackMessages := append(messages, providers.Message{
@@ -1078,10 +1079,10 @@ func (h *ConnectionHandler) genResponseByVLLM(ctx context.Context, messages []pr
 		Content: content,
 	})
 
-	h.logger.Info(h.deviceID, fmt.Sprintf("VLLLM回复处理完成 …%v", map[string]interface{}{
+	log.Infof("[%v] VLLLM回复处理完成 …%v", h.deviceID, map[string]interface{}{
 		"content_length": len(content),
 		"text_segments":  textIndex,
-	}))
+	})
 
 	return nil
 }

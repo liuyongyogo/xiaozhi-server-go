@@ -4,6 +4,7 @@ import (
 	"context"
 	"xiaozhi-server-go/src/configs"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +31,7 @@ func (s *DefaultCfgService) Start(ctx context.Context, engine *gin.Engine, apiGr
 	apiGroup.POST("/cfg", s.handlePost)
 	apiGroup.OPTIONS("/cfg", s.handleOptions)
 
-	s.logger.Info("Cfg HTTP服务路由注册完成")
+	log.Infof("Cfg HTTP服务路由注册完成")
 	return nil
 }
 

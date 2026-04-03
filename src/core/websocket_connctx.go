@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"xiaozhi-server-go/src/core/pool"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 )
 
 // ConnectionContext 连接上下文，用于跟踪资源分配
@@ -55,14 +56,14 @@ func (c *ConnectionContext) CreateSafeCallback() func(func(*ConnectionHandler)) 
 		return func() {
 			// 检查连接是否仍然活跃
 			if !c.IsActive() {
-				c.logger.Info(fmt.Sprintf("客户端 %s 连接已关闭，跳过回调", c.clientID))
+				log.Infof("客户端 %s 连接已关闭，跳过回调", c.clientID)
 				return
 			}
 
 			// 检查上下文是否已取消
 			select {
 			case <-c.ctx.Done():
-				c.logger.Info(fmt.Sprintf("客户端 %s 上下文已取消，跳过回调", c.clientID))
+				log.Infof("客户端 %s 上下文已取消，跳过回调", c.clientID)
 				return
 			default:
 			}
@@ -101,9 +102,9 @@ func (c *ConnectionContext) Close() error {
 	if c.providerSet != nil && c.poolManager != nil {
 		if err := c.poolManager.ReturnProviderSet(c.providerSet); err != nil {
 			errs = append(errs, fmt.Errorf("归还资源失败: %v", err))
-			c.logger.Error(fmt.Sprintf("客户端 %s 归还资源失败: %v", c.clientID, err))
+			log.Errorf("客户端 %s 归还资源失败: %v", c.clientID, err)
 		} else {
-			c.logger.Info(fmt.Sprintf("客户端 %s 资源已成功归还到池中", c.clientID))
+			log.Infof("客户端 %s 资源已成功归还到池中", c.clientID)
 		}
 	}
 

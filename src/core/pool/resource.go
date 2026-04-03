@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 )
 
 /*
@@ -130,7 +131,7 @@ func (p *ResourcePool) refillPool(refillSize int) {
 		for i := 0; i < needCreate && currentSize < p.maxSize; i++ {
 			resource, err := p.factory.Create()
 			if err != nil {
-				p.logger.Error("创建资源失败: %v", err)
+				log.Errorf("创建资源失败: %v", err)
 				continue
 			}
 
@@ -183,11 +184,11 @@ func (p *ResourcePool) Put(resource interface{}) error {
 		return nil
 	case <-timeout.C:
 		// 超时后销毁资源而不是阻塞
-		p.logger.Warn("资源归还超时，销毁资源")
+		log.Warn("资源归还超时，销毁资源")
 		return p.factory.Destroy(resource)
 	default:
 		// 池已满，销毁多余的资源
-		p.logger.Debug("资源池已满，销毁归还的资源")
+		log.Debugf("资源池已满，销毁归还的资源")
 		return p.factory.Destroy(resource)
 	}
 }

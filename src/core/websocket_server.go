@@ -10,6 +10,7 @@ import (
 	"xiaozhi-server-go/src/configs"
 	"xiaozhi-server-go/src/core/pool"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 	"xiaozhi-server-go/src/task"
 
 	"github.com/gorilla/websocket"
@@ -49,7 +50,7 @@ func NewWebSocketServer(config *configs.Config, logger *utils.Logger) (*WebSocke
 	// 初始化资源池管理器
 	poolManager, err := pool.NewPoolManager(config, logger)
 	if err != nil {
-		logger.Error(fmt.Sprintf("初始化资源池管理器失败: %v", err))
+		log.Errorf("初始化资源池管理器失败: %v", err)
 		return nil, fmt.Errorf("初始化资源池管理器失败: %v", err)
 	}
 	ws.poolManager = poolManager
@@ -60,7 +61,7 @@ func NewWebSocketServer(config *configs.Config, logger *utils.Logger) (*WebSocke
 func (ws *WebSocketServer) Start(ctx context.Context) error {
 	// 检查资源池是否正常
 	if ws.poolManager == nil {
-		ws.logger.Error("资源池管理器未初始化")
+		log.Errorf("资源池管理器未初始化")
 		return fmt.Errorf("资源池管理器未初始化")
 	}
 
@@ -74,15 +75,15 @@ func (ws *WebSocketServer) Start(ctx context.Context) error {
 		Handler: mux,
 	}
 
-	ws.logger.Info(fmt.Sprintf("启动WebSocket服务器 ws://%s...", addr))
+	log.Infof("启动WebSocket服务器 ws://%s...", addr)
 
 	// 启动服务器
 	if err := ws.server.ListenAndServe(); err != nil {
 		if err == http.ErrServerClosed {
-			ws.logger.Info("服务器已正常关闭")
+			log.Infof("服务器已正常关闭")
 			return nil
 		}
-		ws.logger.Error(fmt.Sprintf("服务器启动失败: %v", err))
+		log.Errorf("服务器启动失败: %v", err)
 		return fmt.Errorf("服务器启动失败: %v", err)
 	}
 
@@ -125,13 +126,13 @@ func (u *defaultUpgrader) Upgrade(w http.ResponseWriter, r *http.Request) (Conne
 // Stop 停止WebSocket服务器
 func (ws *WebSocketServer) Stop() error {
 	if ws.server != nil {
-		ws.logger.Info("正在关闭WebSocket服务器...")
+		log.Infof("正在关闭WebSocket服务器...")
 
 		// 关闭所有活动连接并归还资源
 		ws.activeConnections.Range(func(key, value interface{}) bool {
 			if ctx, ok := value.(*ConnectionContext); ok {
 				if err := ctx.Close(); err != nil {
-					ws.logger.Error(fmt.Sprintf("关闭连接上下文失败: %v", err))
+					log.Errorf("关闭连接上下文失败: %v", err)
 				}
 			} else if conn, ok := value.(Connection); ok {
 				// 向后兼容：直接关闭连接（如果存储的是旧格式）
@@ -158,7 +159,7 @@ func (ws *WebSocketServer) Stop() error {
 func (ws *WebSocketServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := ws.upgrader.Upgrade(w, r)
 	if err != nil {
-		ws.logger.Error(fmt.Sprintf("WebSocket升级失败: %v", err))
+		log.Errorf("WebSocket升级失败: %v", err)
 		return
 	}
 
@@ -167,7 +168,7 @@ func (ws *WebSocketServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 	// 从资源池获取提供者集合
 	providerSet, err := ws.poolManager.GetProviderSet()
 	if err != nil {
-		ws.logger.Error(fmt.Sprintf("获取提供者集合失败: %v", err))
+		log.Errorf("获取提供者集合失败: %v", err)
 		conn.Close()
 		return
 	}
@@ -185,7 +186,7 @@ func (ws *WebSocketServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 	// 存储连接上下文
 	ws.activeConnections.Store(clientID, connContext)
 
-	ws.logger.Info(fmt.Sprintf("客户端 %s 连接已建立，资源已分配", clientID))
+	log.Infof("客户端 %s 连接已建立，资源已分配", clientID)
 
 	// 启动连接处理，并在结束时清理资源
 	go func() {
@@ -193,7 +194,7 @@ func (ws *WebSocketServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 			// 连接结束时清理
 			ws.activeConnections.Delete(clientID)
 			if err := connContext.Close(); err != nil {
-				ws.logger.Error(fmt.Sprintf("清理连接上下文失败: %v", err))
+				log.Errorf("清理连接上下文失败: %v", err)
 			}
 		}()
 

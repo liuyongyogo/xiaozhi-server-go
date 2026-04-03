@@ -43,7 +43,7 @@ func (p *Provider) ToTTS(text string) (string, error) {
 	//	  -H "Content-Type: application/json" \
 	//	  -d '{"text": "我是通义生成式语音大模型,我说话好听不？", "speaker": "中文女"}' \
 	//	  --output output.wav
-	url := "http://10.43.254.21:5000/tts"
+	url := "http://192.168.8.187:5000/tts"
 	tts := TtsInfo{
 		Text:    text,
 		Speaker: "中文女",
@@ -51,19 +51,19 @@ func (p *Provider) ToTTS(text string) (string, error) {
 	ttsjs, _ := json.Marshal(tts)
 	resp, erx := http.Post(url, "application/json", strings.NewReader(string(ttsjs)))
 	if erx != nil {
-		log.Error("PoserServer error:", erx)
+		log.Errorf("PoserServer error: %v", erx)
 		return "", fmt.Errorf("edge-tts-go 获取音频流失败: %v", erx)
 	}
 	// defer resp.Body.Close()
 	body, er2 := io.ReadAll(resp.Body)
 	if er2 != nil {
-		log.Error("PostServer error:", er2)
+		log.Errorf("PostServer error: %v", er2)
 		return "", fmt.Errorf("edge-tts-go 获取音频流失败: %v", er2)
 	}
 	log.Infof("post_response size: %v", len(body))
 	resp.Body.Close()
 
-	tempwav := filepath.Join(outputDir, fmt.Sprintf("cosvoice_%v.wav", time.Now().Format("2006-01-02_15_04_05_000000")))
+	tempwav := filepath.Join(outputDir, fmt.Sprintf("cosvoice_%v.wav", time.Now().Format("2006-01-02_15_04_05.000000")))
 
 	// 将音频数据写入临时文件
 	err := os.WriteFile(tempwav, body, 0644)
@@ -77,7 +77,7 @@ func (p *Provider) ToTTS(text string) (string, error) {
 	}
 	//fmt.Printf("音频文件已生成: %s\n", tempFile)
 
-	tempFile := filepath.Join(outputDir, fmt.Sprintf("cosvoice_%v.mp3", time.Now().Format("2006-01-02_15_04_05_000000")))
+	tempFile := filepath.Join(outputDir, fmt.Sprintf("cosvoice_%v.mp3", time.Now().Format("2006-01-02_15_04_05.000000")))
 
 	cmd2 := exec.Command("lame", "--resample", "24", tempwav, tempFile, "--quiet")
 	if err := cmd2.Run(); err != nil {
@@ -110,8 +110,8 @@ func (p *Provider) ToTTSMacosSay(text string) (string, error) {
 		return "", fmt.Errorf("创建输出目录失败 '%s': %v", outputDir, err)
 	}
 	// Use a unique filename
-	tempFile := filepath.Join(outputDir, fmt.Sprintf("macos_say_%v.mp3", time.Now().Format("2006-01-02_15_04_05_000000")))
-	tempaiff := filepath.Join(outputDir, fmt.Sprintf("macos_say_%v.aiff", time.Now().Format("2006-01-02_15_04_05_000000")))
+	tempFile := filepath.Join(outputDir, fmt.Sprintf("macos_say_%v.mp3", time.Now().Format("2006-01-02_15_04_05.000000")))
+	tempaiff := filepath.Join(outputDir, fmt.Sprintf("macos_say_%v.aiff", time.Now().Format("2006-01-02_15_04_05.000000")))
 	log.Warnf("====================aiff %v", tempaiff)
 	// say "你好，这是一个示例文本。" -o output.aiff && ffmpeg -i output.aiff -codec:a libmp3lame output.mp3
 	// cmd := exec.Command("say", string(text), "-o", text+".aiff", " && ", "ffmpeg", "-i", text+".aiff", "-codec:a", "libmp3lame", tempFile)
@@ -145,16 +145,16 @@ func (p *Provider) ToTTSMacosSay(text string) (string, error) {
 		url := "http://yong.yogorobot.com:8080/tts"
 		resp, erx := http.Post(url, "application/text", strings.NewReader(text))
 		if erx != nil {
-			log.Error("PoserServer error:", erx)
+			log.Errorf("PoserServer error:", erx)
 			return "", fmt.Errorf("edge-tts-go 获取音频流失败: %v", erx)
 		}
 		// defer resp.Body.Close()
 		body, er2 := io.ReadAll(resp.Body)
 		if er2 != nil {
-			log.Error("PostServer error:", er2)
+			log.Errorf("PostServer error:", er2)
 			return "", fmt.Errorf("edge-tts-go 获取音频流失败: %v", er2)
 		}
-		log.Infof("post_response size: %v", len(body))
+		log.Infoff("post_response size: %v", len(body))
 		resp.Body.Close()
 		// 获取音频流数据
 		// audioData, err := conn.Stream()

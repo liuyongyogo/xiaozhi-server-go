@@ -9,6 +9,7 @@ import (
 	"xiaozhi-server-go/src/core/providers"
 	"xiaozhi-server-go/src/core/providers/vlllm"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 )
 
 // PoolManager 资源池管理器
@@ -63,7 +64,7 @@ func NewPoolManager(config *configs.Config, logger *utils.Logger) (*PoolManager,
 		}
 		pm.asrPool = asrPool
 		_, cnt := asrPool.GetStats()
-		logger.Info("ASR资源池初始化成功，类型: %s, 数量：%d", asrType, cnt)
+		log.Infof("ASR资源池初始化成功，类型: %s, 数量：%d", asrType, cnt)
 	}
 
 	// 初始化LLM池
@@ -78,7 +79,7 @@ func NewPoolManager(config *configs.Config, logger *utils.Logger) (*PoolManager,
 		}
 		pm.llmPool = llmPool
 		_, cnt := llmPool.GetStats()
-		logger.Info("LLM资源池初始化成功，类型: %s, 数量：%d", llmType, cnt)
+		log.Infof("LLM资源池初始化成功，类型: %s, 数量：%d", llmType, cnt)
 	}
 
 	// 初始化TTS池
@@ -93,27 +94,27 @@ func NewPoolManager(config *configs.Config, logger *utils.Logger) (*PoolManager,
 		}
 		pm.ttsPool = ttsPool
 		_, cnt := ttsPool.GetStats()
-		logger.Info("TTS资源池初始化成功，类型: %s, 数量：%d", ttsType, cnt)
+		log.Infof("TTS资源池初始化成功，类型: %s, 数量：%d", ttsType, cnt)
 	}
 
 	// 初始化VLLLM池（可选）
 	if vlllmType, ok := selectedModule["VLLLM"]; ok && vlllmType != "" {
 		vlllmFactory := NewVLLLMFactory(vlllmType, config, logger)
 		if vlllmFactory == nil {
-			logger.Warn("创建VLLLM工厂失败: 找不到配置 %s", vlllmType)
+			log.Warnf("创建VLLLM工厂失败: 找不到配置 %s", vlllmType)
 		} else {
 			vlllmPool, err := NewResourcePool(vlllmFactory, poolConfig, logger)
 			if err != nil {
-				logger.Warn("初始化VLLLM资源池失败（将继续使用普通LLM）: %v", err)
+				log.Warnf("初始化VLLLM资源池失败（将继续使用普通LLM）: %v", err)
 			} else {
 				pm.vlllmPool = vlllmPool
 			}
 		}
 		if pm.vlllmPool != nil {
 			_, cnt := pm.vlllmPool.GetStats()
-			logger.Info("VLLLM资源池初始化成功，类型: %s, 数量：%d", vlllmType, cnt)
+			log.Infof("VLLLM资源池初始化成功，类型: %s, 数量：%d", vlllmType, cnt)
 		} else {
-			logger.Warn("VLLLM资源池未初始化，将使用普通LLM")
+			log.Warn("VLLLM资源池未初始化，将使用普通LLM")
 		}
 	}
 
@@ -125,7 +126,7 @@ func NewPoolManager(config *configs.Config, logger *utils.Logger) (*PoolManager,
 	}
 
 	// 初始化MCP池（总是初始化，因为MCP是核心功能）
-	logger.Info("开始初始化MCP资源池，请等待...")
+	log.Infof("开始初始化MCP资源池，请等待...")
 	mcpFactory := NewMCPFactory(config, logger)
 	if mcpFactory != nil {
 		mcpPool, err := NewResourcePool(mcpFactory, poolConfig, logger)
@@ -134,9 +135,9 @@ func NewPoolManager(config *configs.Config, logger *utils.Logger) (*PoolManager,
 		}
 		pm.mcpPool = mcpPool
 		_, cnt := mcpPool.GetStats()
-		logger.Info("MCP资源池初始化成功，数量：%d", cnt)
+		log.Infof("MCP资源池初始化成功，数量：%d", cnt)
 	} else {
-		logger.Warn("创建MCP工厂失败，MCP功能将不可用")
+		log.Warn("创建MCP工厂失败，MCP功能将不可用")
 	}
 
 	return pm, nil
@@ -220,66 +221,66 @@ func (pm *PoolManager) ReturnProviderSet(set *ProviderSet) error {
 	if set.ASR != nil && pm.asrPool != nil {
 		// 重置资源状态
 		if err := pm.asrPool.Reset(set.ASR); err != nil {
-			pm.logger.Warn("重置ASR资源状态失败: %v", err)
+			log.Warnf("重置ASR资源状态失败: %v", err)
 		}
 		// 归还到池中
 		if err := pm.asrPool.Put(set.ASR); err != nil {
 			errs = append(errs, fmt.Errorf("归还ASR提供者失败: %v", err))
-			pm.logger.Error("归还ASR提供者失败: %v", err)
+			log.Errorf("归还ASR提供者失败: %v", err)
 		} else {
-			pm.logger.Debug("ASR提供者已成功归还到池中")
+			log.Debugf("ASR提供者已成功归还到池中")
 		}
 	}
 
 	// 归还LLM提供者
 	if set.LLM != nil && pm.llmPool != nil {
 		if err := pm.llmPool.Reset(set.LLM); err != nil {
-			pm.logger.Warn("重置LLM资源状态失败: %v", err)
+			log.Warnf("重置LLM资源状态失败: %v", err)
 		}
 		if err := pm.llmPool.Put(set.LLM); err != nil {
 			errs = append(errs, fmt.Errorf("归还LLM提供者失败: %v", err))
-			pm.logger.Error("归还LLM提供者失败: %v", err)
+			log.Errorf("归还LLM提供者失败: %v", err)
 		} else {
-			pm.logger.Debug("LLM提供者已成功归还到池中")
+			log.Debugf("LLM提供者已成功归还到池中")
 		}
 	}
 
 	// 归还TTS提供者
 	if set.TTS != nil && pm.ttsPool != nil {
 		if err := pm.ttsPool.Reset(set.TTS); err != nil {
-			pm.logger.Warn("重置TTS资源状态失败: %v", err)
+			log.Warnf("重置TTS资源状态失败: %v", err)
 		}
 		if err := pm.ttsPool.Put(set.TTS); err != nil {
 			errs = append(errs, fmt.Errorf("归还TTS提供者失败: %v", err))
-			pm.logger.Error("归还TTS提供者失败: %v", err)
+			log.Errorf("归还TTS提供者失败: %v", err)
 		} else {
-			pm.logger.Debug("TTS提供者已成功归还到池中")
+			log.Debugf("TTS提供者已成功归还到池中")
 		}
 	}
 
 	// 归还VLLLM提供者
 	if set.VLLLM != nil && pm.vlllmPool != nil {
 		if err := pm.vlllmPool.Reset(set.VLLLM); err != nil {
-			pm.logger.Warn("重置VLLLM资源状态失败: %v", err)
+			log.Warnf("重置VLLLM资源状态失败: %v", err)
 		}
 		if err := pm.vlllmPool.Put(set.VLLLM); err != nil {
 			errs = append(errs, fmt.Errorf("归还VLLLM提供者失败: %v", err))
-			pm.logger.Error("归还VLLLM提供者失败: %v", err)
+			log.Errorf("归还VLLLM提供者失败: %v", err)
 		} else {
-			pm.logger.Debug("VLLLM提供者已成功归还到池中")
+			log.Debugf("VLLLM提供者已成功归还到池中")
 		}
 	}
 
 	// 归还MCP提供者
 	if set.MCP != nil && pm.mcpPool != nil {
 		if err := pm.mcpPool.Reset(set.MCP); err != nil {
-			pm.logger.Warn("重置MCP资源状态失败: %v", err)
+			log.Warnf("重置MCP资源状态失败: %v", err)
 		}
 		if err := pm.mcpPool.Put(set.MCP); err != nil {
 			errs = append(errs, fmt.Errorf("归还MCP提供者失败: %v", err))
-			pm.logger.Error("归还MCP提供者失败: %v", err)
+			log.Errorf("归还MCP提供者失败: %v", err)
 		} else {
-			pm.logger.Debug("MCP提供者已成功归还到池中")
+			log.Debugf("MCP提供者已成功归还到池中")
 		}
 	}
 
@@ -287,7 +288,7 @@ func (pm *PoolManager) ReturnProviderSet(set *ProviderSet) error {
 		return fmt.Errorf("归还过程中发生多个错误: %v", errs)
 	}
 
-	pm.logger.Debug("所有提供者已成功归还到池中")
+	log.Debugf("所有提供者已成功归还到池中")
 	return nil
 }
 
@@ -328,7 +329,7 @@ func (pm *PoolManager) performConnectivityCheck(config *configs.Config, logger *
 	// 从配置创建连通性检查配置
 	connConfig, err := ConfigFromYAML(&config.ConnectivityCheck)
 	if err != nil {
-		logger.Warn("解析连通性检查配置失败，使用默认配置: %v", err)
+		log.Warnf("解析连通性检查配置失败，使用默认配置: %v", err)
 		connConfig = DefaultConnectivityConfig()
 	}
 

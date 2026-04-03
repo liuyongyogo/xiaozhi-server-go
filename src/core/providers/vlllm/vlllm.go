@@ -14,6 +14,7 @@ import (
 	"xiaozhi-server-go/src/core/image"
 	"xiaozhi-server-go/src/core/providers"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -118,7 +119,7 @@ func (p *Provider) Initialize() error {
 		if p.config.BaseURL == "" {
 			p.config.BaseURL = "http://localhost:11434" // 默认Ollama地址
 		}
-		p.logger.Debug("Ollama VLLLM初始化成功 %v", map[string]interface{}{
+		log.Debugf("Ollama VLLLM初始化成功 %v", map[string]interface{}{
 			"base_url": p.config.BaseURL,
 			"model":    p.config.ModelName,
 		})
@@ -127,7 +128,7 @@ func (p *Provider) Initialize() error {
 		return fmt.Errorf("不支持的VLLLM类型: %s", p.config.Type)
 	}
 
-	p.logger.Debug("VLLLM Provider初始化成功 %v", map[string]interface{}{
+	log.Debugf("VLLLM Provider初始化成功 %v", map[string]interface{}{
 		"type":       p.config.Type,
 		"model_name": p.config.ModelName,
 	})
@@ -139,10 +140,10 @@ func (p *Provider) Initialize() error {
 func (p *Provider) Cleanup() error {
 	// 清理图片处理器
 	if err := p.imageProcessor.Cleanup(); err != nil {
-		p.logger.Warn("清理图片处理器失败", err)
+		log.Warn("清理图片处理器失败", err)
 	}
 
-	p.logger.Info("VLLLM Provider清理完成")
+	log.Infof("VLLLM Provider清理完成")
 	return nil
 }
 
@@ -154,7 +155,7 @@ func (p *Provider) ResponseWithImage(ctx context.Context, sessionID string, mess
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
 
-	p.logger.Debug("开始调用多模态API %v", map[string]interface{}{
+	log.Debugf("开始调用多模态API %v", map[string]interface{}{
 		"type":       p.config.Type,
 		"model_name": p.config.ModelName,
 		"text":       text,
@@ -207,7 +208,7 @@ func (p *Provider) responseWithOpenAIVision(ctx context.Context, messages []prov
 			},
 		}
 		// 打印visionMessage的内容
-		p.logger.Debug("构建的OpenAI Vision消息: %v", visionMessage)
+		log.Debugf("构建的OpenAI Vision消息: %v", visionMessage)
 		chatMessages = append(chatMessages, visionMessage)
 
 		// 调用OpenAI Vision API
@@ -223,14 +224,14 @@ func (p *Provider) responseWithOpenAIVision(ctx context.Context, messages []prov
 		)
 		if err != nil {
 			responseChan <- fmt.Sprintf("【VLLLM服务响应异常: %v】", err)
-			p.logger.Error("OpenAI Vision API调用失败 %v", err)
-			p.logger.Info("OpenAI Vision API调用失败，%s, maxTokens:%dm, Temperature:%f, top:%f", p.config.ModelName, p.config.MaxTokens, float32(p.config.Temperature), float32(p.config.TopP))
+			log.Errorf("OpenAI Vision API调用失败 %v", err)
+			log.Infof("OpenAI Vision API调用失败，%s, maxTokens:%dm, Temperature:%f, top:%f", p.config.ModelName, p.config.MaxTokens, float32(p.config.Temperature), float32(p.config.TopP))
 
 			return
 		}
 		defer stream.Close()
 
-		p.logger.Info("OpenAI Vision API调用成功，开始接收流式回复")
+		log.Infof("OpenAI Vision API调用成功，开始接收流式回复")
 
 		isActive := true
 		for {
@@ -250,7 +251,7 @@ func (p *Provider) responseWithOpenAIVision(ctx context.Context, messages []prov
 			}
 		}
 
-		p.logger.Info("OpenAI Vision API流式回复完成")
+		log.Infof("OpenAI Vision API流式回复完成")
 	}()
 
 	return responseChan, nil
@@ -297,7 +298,7 @@ func (p *Provider) responseWithOllamaVision(ctx context.Context, messages []prov
 		requestBody, err := json.Marshal(request)
 		if err != nil {
 			responseChan <- fmt.Sprintf("【请求序列化失败: %v】", err)
-			p.logger.Error("Ollama请求序列化失败", err)
+			log.Errorf("Ollama请求序列化失败", err)
 			return
 		}
 
@@ -306,13 +307,13 @@ func (p *Provider) responseWithOllamaVision(ctx context.Context, messages []prov
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 		if err != nil {
 			responseChan <- fmt.Sprintf("【创建请求失败: %v】", err)
-			p.logger.Error("创建Ollama请求失败", err)
+			log.Errorf("创建Ollama请求失败", err)
 			return
 		}
 
 		req.Header.Set("Content-Type", "application/json")
 
-		p.logger.Info("向Ollama发送多模态请求", map[string]interface{}{
+		log.Infof("向Ollama发送多模态请求 %v", map[string]interface{}{
 			"url":   url,
 			"model": p.config.ModelName,
 			"text":  text,
@@ -321,21 +322,21 @@ func (p *Provider) responseWithOllamaVision(ctx context.Context, messages []prov
 		resp, err := p.httpClient.Do(req)
 		if err != nil {
 			responseChan <- fmt.Sprintf("【Ollama API调用失败: %v】", err)
-			p.logger.Error("Ollama API调用失败", err)
+			log.Errorf("Ollama API调用失败 %v", err)
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			responseChan <- fmt.Sprintf("【Ollama API返回错误: %d】", resp.StatusCode)
-			p.logger.Error("Ollama API返回错误", map[string]interface{}{
+			log.Errorf("Ollama API返回错误 %v", map[string]interface{}{
 				"status_code": resp.StatusCode,
 				"status":      resp.Status,
 			})
 			return
 		}
 
-		p.logger.Info("Ollama Vision API调用成功，开始接收流式回复")
+		log.Infof("Ollama Vision API调用成功，开始接收流式回复")
 
 		// 处理流式响应
 		decoder := json.NewDecoder(resp.Body)
@@ -345,7 +346,7 @@ func (p *Provider) responseWithOllamaVision(ctx context.Context, messages []prov
 			var response OllamaResponse
 			if err := decoder.Decode(&response); err != nil {
 				if err.Error() != "EOF" {
-					p.logger.Error("解析Ollama响应失败", err)
+					log.Errorf("解析Ollama响应失败 %v", err)
 				}
 				break
 			}
@@ -363,7 +364,7 @@ func (p *Provider) responseWithOllamaVision(ctx context.Context, messages []prov
 			}
 		}
 
-		p.logger.Info("Ollama Vision API流式回复完成")
+		log.Infof("Ollama Vision API流式回复完成")
 	}()
 
 	return responseChan, nil

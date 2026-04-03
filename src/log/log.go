@@ -140,12 +140,12 @@ func (l *Logger) SetWriter(w io.Writer) {
 	l.w = w
 }
 
-// SetPrefix sets the prefix for this logger.
+// SetPrefix sets the prefix for this log.
 func (l *Logger) SetPrefix(prefix string) {
 	l.prefix = prefix
 }
 
-// SetCallerDepth sets the caller depth for this logger.
+// SetCallerDepth sets the caller depth for this log.
 func (l *Logger) SetCallerDepth(callerDepth int) {
 	l.callerDepth = callerDepth
 }
@@ -262,7 +262,7 @@ func (l *Logger) log(level int, msg string) error {
 		if !l.enableCallerSourceLogging {
 			headerString = fmt.Sprintf("[%s] %s %s", l.name, levelName, fmtNow)
 		} else {
-			headerString = fmt.Sprintf("%s %s %s:%d ", fmtNow, Colored(levelColors[level], levelName), filepath, line)
+			headerString = fmt.Sprintf("%s %s %s:%03d ", fmtNow, Colored(levelColors[level], levelName), filepath, line)
 			// headerString = fmt.Sprintf("%s %s %s:%d %s", fmtNow,  Colored(levelColors[level], levelName), filepath, line, funcName)
 		}
 		//header := Colored(levelColors[level], headerString)

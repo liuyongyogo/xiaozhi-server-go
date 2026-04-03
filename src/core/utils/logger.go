@@ -175,7 +175,7 @@ func NewLogger(config *configs.Config) (*Logger, error) {
 	}
 
 	// 启动日志轮转检查器
-	logger.startRotationChecker()
+	// log.startRotationChecker()
 
 	return logger, nil
 }

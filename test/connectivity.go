@@ -38,7 +38,7 @@ func main() {
 	// 创建连通性检查配置
 	connConfig, err := pool.ConfigFromYAML(&config.ConnectivityCheck)
 	if err != nil {
-		logger.Warn("解析连通性检查配置失败，使用默认配置: %v", err)
+		log.Warn("解析连通性检查配置失败，使用默认配置: %v", err)
 		connConfig = pool.DefaultConnectivityConfig()
 	}
 

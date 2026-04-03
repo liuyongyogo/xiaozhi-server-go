@@ -6,6 +6,7 @@ import (
 	"sync"
 	"xiaozhi-server-go/src/configs"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -34,39 +35,39 @@ func NewLocalClient(logger *utils.Logger, cfg *configs.Config) (*LocalClient, er
 
 func (c *LocalClient) RegisterTools() {
 	if c.cfg == nil {
-		c.logger.Error("RegisterTools: config is nil")
+		log.Errorf("RegisterTools: config is nil")
 		return
 	}
 
 	if c.cfg.LocalMCPFun == nil {
-		c.logger.Warn("RegisterTools: LocalMCPFun is nil")
+		log.Warn("RegisterTools: LocalMCPFun is nil")
 		return
 	}
 
 	funcs := c.cfg.LocalMCPFun
 	if len(funcs) == 0 {
-		c.logger.Info("RegisterTools: LocalMCPFun is empty")
+		log.Infof("RegisterTools: LocalMCPFun is empty")
 		return
 	}
 
 	for _, funcName := range funcs {
 		if funcName == "exit" {
 			c.AddToolExit()
-			c.logger.Info("RegisterTools: exit tool registered")
+			log.Infof("RegisterTools: exit tool registered")
 		} else if funcName == "time" {
 			c.AddToolTime()
-			c.logger.Info("RegisterTools: time tool registered")
+			log.Infof("RegisterTools: time tool registered")
 		} else if funcName == "change_voice" {
 			c.AddToolChangeVoice()
-			c.logger.Info("RegisterTools: change_voice tool registered")
+			log.Infof("RegisterTools: change_voice tool registered")
 		} else if funcName == "change_role" {
 			c.AddToolChangeRole()
-			c.logger.Info("RegisterTools: change_role tool registered")
+			log.Infof("RegisterTools: change_role tool registered")
 		} else if funcName == "play_music" {
 			c.AddToolPlayMusic()
-			c.logger.Info("RegisterTools: play_music tool registered")
+			log.Infof("RegisterTools: play_music tool registered")
 		} else {
-			c.logger.Warn("RegisterTools: unknown function name %s", funcName)
+			log.Warn("RegisterTools: unknown function name %s", funcName)
 		}
 	}
 }
@@ -75,7 +76,7 @@ func (c *LocalClient) RegisterTools() {
 func (c *LocalClient) Start(ctx context.Context) error {
 	c.ctx = ctx
 	c.RegisterTools()
-	c.logger.Info("Local MCP client started")
+	log.Infof("Local MCP client started")
 	return nil
 }
 

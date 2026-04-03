@@ -8,6 +8,7 @@ import (
 
 	"xiaozhi-server-go/src/core/types"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -77,7 +78,7 @@ func NewClient(config *Config, logger *utils.Logger) (*Client, error) {
 // Start 启动MCP客户端并监听资源更新
 func (c *Client) Start(ctx context.Context) error {
 	if c.useStdioClient {
-		//c.logger.Info("Starting MCP stdio client with command: %s", c.config.Command)
+		//log.Infof("Starting MCP stdio client with command: %s", c.config.Command)
 
 		// 创建初始化请求
 		initRequest := mcp.InitializeRequest{}
@@ -97,7 +98,7 @@ func (c *Client) Start(ctx context.Context) error {
 			return fmt.Errorf("failed to initialize stdio MCP client: %w", err)
 		}
 		c.name = initResult.ServerInfo.Name
-		c.logger.Info("Initialized server: %s %s with conmmand: %s",
+		log.Infof("Initialized server: %s %s with conmmand: %s",
 			initResult.ServerInfo.Name,
 			initResult.ServerInfo.Version,
 			c.config.Command)
@@ -152,7 +153,7 @@ func (c *Client) fetchTools(ctx context.Context) error {
 			toolNames += fmt.Sprintf("%s, ", tool.Name)
 			//log.Printf("Added tool: %s - %s %v; %v; %v", tool.Name, tool.Description, tool.InputSchema, tool.RawInputSchema, tool.Annotations)
 		}
-		c.logger.Info("Fetching %s available tools %s", c.name, toolNames)
+		log.Infof("Fetching %s available tools %s", c.name, toolNames)
 		return nil
 	} else {
 		// 原有方式的实现保持不变
@@ -165,12 +166,12 @@ func (c *Client) fetchTools(ctx context.Context) error {
 func (c *Client) Stop() {
 	if c.useStdioClient {
 		if c.stdioClient != nil {
-			c.logger.Info("Stopping MCP stdio client")
+			log.Infof("Stopping MCP stdio client")
 			c.stdioClient.Close()
 		}
 		// } else {
 		// 	if c.client != nil {
-		// 		c.logger.Info("Stopping MCP client")
+		// 		log.Infof("Stopping MCP client")
 		// 		c.client.Close()
 		// 	}
 	}

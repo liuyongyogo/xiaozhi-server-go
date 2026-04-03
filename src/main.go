@@ -21,6 +21,7 @@ import (
 	"xiaozhi-server-go/src/core"
 	"xiaozhi-server-go/src/core/utils"
 	_ "xiaozhi-server-go/src/docs"
+	"xiaozhi-server-go/src/log"
 	"xiaozhi-server-go/src/ota"
 	"xiaozhi-server-go/src/vision"
 
@@ -58,7 +59,7 @@ func LoadConfigAndLogger() (*configs.Config, *utils.Logger, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	logger.Info(fmt.Sprintf("日志系统初始化成功, 配置文件路径: %s", configPath))
+	log.Infof("日志系统初始化成功, 配置文件路径: %s", configPath)
 
 	return config, logger, nil
 }
@@ -75,11 +76,11 @@ func StartWSServer(config *configs.Config, logger *utils.Logger, g *errgroup.Gro
 		// 监听关闭信号
 		go func() {
 			<-groupCtx.Done()
-			logger.Info("收到关闭信号，开始关闭WebSocket服务...")
+			log.Infof("收到关闭信号，开始关闭WebSocket服务...")
 			if err := wsServer.Stop(); err != nil {
-				logger.Error("WebSocket服务关闭失败", err)
+				log.Errorf("WebSocket服务关闭失败 %v", err)
 			} else {
-				logger.Info("WebSocket服务已优雅关闭")
+				log.Infof("WebSocket服务已优雅关闭")
 			}
 		}()
 
@@ -87,13 +88,13 @@ func StartWSServer(config *configs.Config, logger *utils.Logger, g *errgroup.Gro
 			if groupCtx.Err() != nil {
 				return nil // 正常关闭
 			}
-			logger.Error("WebSocket 服务运行失败", err)
+			log.Errorf("WebSocket 服务运行失败 %v", err)
 			return err
 		}
 		return nil
 	})
 
-	logger.Info("WebSocket 服务已成功启动")
+	log.Infof("WebSocket 服务已成功启动")
 	return wsServer, nil
 }
 
@@ -112,28 +113,28 @@ func StartHttpServer(config *configs.Config, logger *utils.Logger, g *errgroup.G
 	// 启动OTA服务
 	otaService := ota.NewDefaultOTAService(config.Web.Websocket)
 	if err := otaService.Start(groupCtx, router, apiGroup); err != nil {
-		logger.Error("OTA 服务启动失败", err)
+		log.Errorf("OTA 服务启动失败 %v", err)
 		return nil, err
 	}
 
 	// 启动Vision服务
 	visionService, err := vision.NewDefaultVisionService(config, logger)
 	if err != nil {
-		logger.Error("Vision 服务初始化失败 %v", err)
+		log.Errorf("Vision 服务初始化失败 %v", err)
 		return nil, err
 	}
 	if err := visionService.Start(groupCtx, router, apiGroup); err != nil {
-		logger.Error("Vision 服务启动失败", err)
+		log.Errorf("Vision 服务启动失败 %v", err)
 		return nil, err
 	}
 
 	cfgServer, err := cfg.NewDefaultCfgService(config, logger)
 	if err != nil {
-		logger.Error("配置服务初始化失败 %v", err)
+		log.Errorf("配置服务初始化失败 %v", err)
 		return nil, err
 	}
 	if err := cfgServer.Start(groupCtx, router, apiGroup); err != nil {
-		logger.Error("配置服务启动失败", err)
+		log.Errorf("配置服务启动失败 %v", err)
 		return nil, err
 	}
 
@@ -147,27 +148,27 @@ func StartHttpServer(config *configs.Config, logger *utils.Logger, g *errgroup.G
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	g.Go(func() error {
-		logger.Info(fmt.Sprintf("Gin 服务已启动，访问地址: http://0.0.0.0:%d", config.Web.Port))
+		log.Infof("Gin 服务已启动，访问地址: http://0.0.0.0:%d", config.Web.Port)
 
 		// 在单独的 goroutine 中监听关闭信号
 		go func() {
 			<-groupCtx.Done()
-			logger.Info("收到关闭信号，开始关闭HTTP服务...")
+			log.Infof("收到关闭信号，开始关闭HTTP服务...")
 
 			// 创建关闭超时上下文
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
 			if err := httpServer.Shutdown(shutdownCtx); err != nil {
-				logger.Error("HTTP服务关闭失败", err)
+				log.Errorf("HTTP服务关闭失败 %v", err)
 			} else {
-				logger.Info("HTTP服务已优雅关闭")
+				log.Infof("HTTP服务已优雅关闭")
 			}
 		}()
 
 		// ListenAndServe 返回 ErrServerClosed 时表示正常关闭
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("HTTP 服务启动失败", err)
+			log.Errorf("HTTP 服务启动失败 %v", err)
 			return err
 		}
 		return nil
@@ -184,7 +185,7 @@ func GracefulShutdown(cancel context.CancelFunc, logger *utils.Logger, g *errgro
 
 	// 等待信号
 	sig := <-sigChan
-	logger.Info(fmt.Sprintf("接收到系统信号: %v，开始优雅关闭服务", sig))
+	log.Infof("接收到系统信号: %v，开始优雅关闭服务", sig)
 
 	// 取消上下文，通知所有服务开始关闭
 	cancel()
@@ -198,12 +199,12 @@ func GracefulShutdown(cancel context.CancelFunc, logger *utils.Logger, g *errgro
 	select {
 	case err := <-done:
 		if err != nil {
-			logger.Error("服务关闭过程中出现错误", err)
+			log.Errorf("服务关闭过程中出现错误 %v", err)
 			os.Exit(1)
 		}
-		logger.Info("所有服务已优雅关闭")
+		log.Infof("所有服务已优雅关闭")
 	case <-time.After(15 * time.Second):
-		logger.Error("服务关闭超时，强制退出")
+		log.Errorf("服务关闭超时，强制退出")
 		os.Exit(1)
 	}
 }
@@ -233,14 +234,14 @@ func main() {
 	// 加载 .env 文件
 	err = godotenv.Load()
 	if err != nil {
-		logger.Warn("未找到 .env 文件，使用系统环境变量")
+		log.Warn("未找到 .env 文件，使用系统环境变量")
 	}
 
 	// 初始化数据库连接
 	db, dbType, err := database.InitDB(logger)
 	_, _ = db, dbType // 避免未使用变量警告
 	if err != nil {
-		logger.Error(fmt.Sprintf("数据库连接失败: %v", err))
+		log.Errorf("数据库连接失败: %v", err)
 		return
 	}
 
@@ -253,7 +254,7 @@ func main() {
 
 	// 启动所有服务
 	if err := startServices(config, logger, g, groupCtx); err != nil {
-		logger.Error("启动服务失败:", err)
+		log.Errorf("启动服务失败:%v", err)
 		cancel()
 		os.Exit(1)
 	}
@@ -261,5 +262,5 @@ func main() {
 	// 启动优雅关机处理
 	GracefulShutdown(cancel, logger, g)
 
-	logger.Info("程序已成功退出")
+	log.Infof("程序已成功退出")
 }

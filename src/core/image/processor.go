@@ -14,6 +14,7 @@ import (
 
 	"xiaozhi-server-go/src/configs"
 	"xiaozhi-server-go/src/core/utils"
+	"xiaozhi-server-go/src/log"
 
 	"github.com/google/uuid"
 )
@@ -83,7 +84,7 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imageData ImageData) 
 			Format: imageData.Format,
 		}
 
-		p.logger.Info("URL图片处理成功", map[string]interface{}{
+		log.Infof("URL图片处理成功", map[string]interface{}{
 			"url":    imageData.URL,
 			"format": imageData.Format,
 		})
@@ -93,7 +94,7 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imageData ImageData) 
 		atomic.AddInt64(&p.metrics.Base64Direct, 1)
 		finalImageData = imageData
 
-		p.logger.Debug("Base64图片处理开始 %v", map[string]interface{}{
+		log.Debugf("Base64图片处理开始 %v", map[string]interface{}{
 			"format":      imageData.Format,
 			"data_length": len(imageData.Data),
 		})
@@ -107,7 +108,7 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imageData ImageData) 
 		atomic.AddInt64(&p.metrics.FailedValidations, 1)
 		if validationResult.SecurityRisk != "" {
 			atomic.AddInt64(&p.metrics.SecurityIncidents, 1)
-			p.logger.Warn("检测到安全威胁", map[string]interface{}{
+			log.Warn("检测到安全威胁", map[string]interface{}{
 				"error":         validationResult.Error.Error(),
 				"security_risk": validationResult.SecurityRisk,
 				"format":        finalImageData.Format,
@@ -116,7 +117,7 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imageData ImageData) 
 		return "", fmt.Errorf("图片验证失败: %v", validationResult.Error)
 	}
 
-	p.logger.Debug("图片处理完成 %v", map[string]interface{}{
+	log.Debugf("图片处理完成 %v", map[string]interface{}{
 		"format":    validationResult.Format,
 		"width":     validationResult.Width,
 		"height":    validationResult.Height,
@@ -138,7 +139,7 @@ func (p *ImageProcessor) processURLImage(ctx context.Context, url string, format
 	// 确保在函数结束时删除临时文件
 	defer func() {
 		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
-			p.logger.Warn("删除临时文件失败", map[string]interface{}{
+			log.Warn("删除临时文件失败", map[string]interface{}{
 				"path":  tempPath,
 				"error": err.Error(),
 			})
@@ -159,7 +160,7 @@ func (p *ImageProcessor) processURLImage(ctx context.Context, url string, format
 	// 转换为base64
 	base64Data := base64.StdEncoding.EncodeToString(imageData)
 
-	p.logger.Info("URL图片下载和转换完成", map[string]interface{}{
+	log.Infof("URL图片下载和转换完成", map[string]interface{}{
 		"url":         url,
 		"temp_path":   tempPath,
 		"file_size":   len(imageData),
@@ -220,7 +221,7 @@ func (p *ImageProcessor) downloadImage(ctx context.Context, url string, tempPath
 		return fmt.Errorf("下载文件失败: %v", err)
 	}
 
-	p.logger.Info("图片下载完成", map[string]interface{}{
+	log.Infof("图片下载完成", map[string]interface{}{
 		"url":          url,
 		"content_type": contentType,
 		"size":         written,
@@ -287,7 +288,7 @@ func (p *ImageProcessor) Cleanup() error {
 		// 删除超过1小时的临时文件
 		if now.Sub(info.ModTime()) > time.Hour {
 			if err := os.Remove(filePath); err != nil {
-				p.logger.Warn("删除过期临时文件失败", map[string]interface{}{
+				log.Warn("删除过期临时文件失败", map[string]interface{}{
 					"path":  filePath,
 					"error": err.Error(),
 				})
@@ -298,7 +299,7 @@ func (p *ImageProcessor) Cleanup() error {
 	}
 
 	if cleanedCount > 0 {
-		p.logger.Info("清理临时文件完成", map[string]interface{}{
+		log.Infof("清理临时文件完成", map[string]interface{}{
 			"cleaned_count": cleanedCount,
 		})
 	}
