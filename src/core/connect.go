@@ -375,7 +375,7 @@ func (h *ConnectionHandler) sendAudioMessageCoroutine() {
 func (h *ConnectionHandler) OnAsrResult(result string) bool {
 	//log.Infof(h.deviceID+fmt.Sprintf("[%s] ASR识别结果: %s", h.clientListenMode, result))
 	if h.providers.asr.GetSilenceCount() >= 2 {
-		log.Infof(h.deviceID, "检测到连续两次静音，结束对话")
+		log.Infof("[%v]检测到连续两次静音，结束对话", h.deviceID)
 		h.closeAfterChat = true // 如果连续两次静音，则结束对话
 		result = "长时间未检测到用户说话，请礼貌的结束对话"
 	}
@@ -702,7 +702,7 @@ func (h *ConnectionHandler) genResponseByLLM(ctx context.Context, messages []pro
 			h.SpeakAndPlay(remainingText, textIndex, round)
 		}
 	} else {
-		log.Debugf("无剩余文本需要处理: fullResponse长度=%d, processedChars=%d", len(fullResponse), processedChars)
+		log.Debugf("[%v]无剩余文本需要处理: fullResponse长度=%d, processedChars=%d", h.deviceID, len(fullResponse), processedChars)
 	}
 
 	// 分析回复并发送相应的情绪
@@ -929,7 +929,7 @@ func (h *ConnectionHandler) SpeakAndPlay(text string, textIndex int, round int) 
 	text = utils.RemoveAllEmoji(text)
 	text = utils.RemoveMarkdownSyntax(text) // 移除Markdown语法
 	if text == "" {
-		log.Warnf("SpeakAndPlay 收到空文本，无法合成语音!!!!!, %d, text:%s.", textIndex, originText)
+		log.Warnf("[%v] SpeakAndPlay 收到空文本，无法合成语音!!!!!, %d, text:%s.", h.deviceID, textIndex, originText)
 		return errors.New("收到空文本，无法合成语音")
 	}
 

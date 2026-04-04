@@ -434,6 +434,7 @@ func (p *Provider) ReadMessage() {
 				strings.Contains(errMsg, "unexpected EOF") {
 				log.Infof("检测到服务端主动断开连接: %v", err)
 			}
+			// log.Errorf("ASR[ERROR] 读取响应失败: %v", errMsg)
 			p.setErrorAndStop(err)
 			return
 		}
@@ -498,7 +499,7 @@ func (p *Provider) ReadMessage() {
 				if p.SilenceTime() > idleTimeout {
 					p.BaseProvider.SilenceCount += 1
 					if p.BaseProvider.SilenceCount >= 3 { // 连续3次静音
-						log.Infof("检测到长时间静音，结束识别")
+						log.Infof("检测到长时间静音，结束识别👋")
 						text = "你没有听清我说话"
 						listener.OnAsrResult(text)
 						shouldFinish = true

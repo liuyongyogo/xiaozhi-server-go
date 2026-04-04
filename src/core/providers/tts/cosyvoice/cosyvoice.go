@@ -33,7 +33,7 @@ type TtsInfo struct {
 	Speaker string `json:"speaker"`
 }
 
-func (p *Provider) ToTTS(text string) (string, error) {
+func (p *Provider) ToTTS2(text string) (string, error) {
 	// 创建临时文件路径用于保存 edgeTTS 生成的 MP3
 	outputDir := p.BaseProvider.Config().OutputDir
 	if outputDir == "" {
@@ -92,7 +92,7 @@ func (p *Provider) ToTTS(text string) (string, error) {
 
 // ToTTS 将文本转换为音频文件，并返回文件路径
 // 使用的edge库是github.com/wujunwei928/edge-tts-go，默认使用24k采样率
-func (p *Provider) ToTTSMacosSay(text string) (string, error) {
+func (p *Provider) ToTTS(text string) (string, error) {
 	// 获取配置的声音，如果未配置则使用默认值
 	// edgeTTSStartTime := time.Now()
 	voice := p.BaseProvider.Config().Voice

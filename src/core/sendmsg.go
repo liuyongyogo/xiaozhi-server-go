@@ -41,7 +41,7 @@ func (h *ConnectionHandler) sendHelloMessage() error {
 }
 
 func (h *ConnectionHandler) sendTTSMessage(state string, text string, textIndex int) error {
-	log.Warnf("[%v] 🎵发送TTS状态消息: %s %v", h.deviceID, state, textIndex)
+	log.Warnf("[%v] TTS状态: %s %v", h.deviceID, state, textIndex)
 	// 发送TTS状态结束通知
 	stateMsg := map[string]interface{}{
 		"type":        "tts",
@@ -162,9 +162,9 @@ func (h *ConnectionHandler) sendAudioMessage(filepath string, text string, textI
 	if textIndex == 1 {
 		now := time.Now()
 		spentTime := now.Sub(h.roundStartTime)
-		log.Debugf("回复首句耗时 %s 第一句话【%s】, round: %d", spentTime, text, round)
+		log.Debugf("[%v] 回复首句耗时 %s 第一句话【%s】, round: %d", h.deviceID, spentTime, text, round)
 	}
-	log.Debugf("TTS发送(%s): \"%s\" (索引:%d/%d，时长:%f，帧数:%d)", h.serverAudioFormat, text, textIndex, h.tts_last_text_index, duration, len(audioData))
+	log.Debugf("[%v] TTS发送(%s): \"%s\" (索引:%d/%d，时长:%f，帧数:%d)", h.deviceID, h.serverAudioFormat, text, textIndex, h.tts_last_text_index, duration, len(audioData))
 
 	// 分时发送音频数据
 	if err := h.sendAudioFrames(audioData, text, round); err != nil {
