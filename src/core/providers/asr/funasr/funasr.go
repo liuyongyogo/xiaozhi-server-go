@@ -52,10 +52,13 @@ type Provider struct {
 	connMutex   sync.Mutex
 
 	sendDataCnt int
+	// 音频设备ID
+	audioDeviceId string
 }
 
 // NewProvider 创建FunASR提供者实例
 func NewProvider(config *asr.Config, deleteFile bool, logger *utils.Logger) (*Provider, error) {
+	log.Warnf("cfg -------------------> %v", config.Data)
 	base := asr.NewBaseProvider(config, deleteFile)
 
 	// 从config.Data中获取配置
@@ -77,6 +80,7 @@ func NewProvider(config *asr.Config, deleteFile bool, logger *utils.Logger) (*Pr
 	audioFs := 16000
 	useItn := true
 	hotwords := make(map[string]int)
+	wsUrl := "ws://localhost:10096/"
 
 	// 从config中获取可选配置
 	if mode, ok := config.Data["asr_mode"].(string); ok {
@@ -106,14 +110,17 @@ func NewProvider(config *asr.Config, deleteFile bool, logger *utils.Logger) (*Pr
 			}
 		}
 	}
+	if url, ok := config.Data["addr"].(string); ok {
+		wsUrl = url
+	}
 
 	provider := &Provider{
 		BaseProvider: base,
 		outputDir:    outputDir,
-		host:         "192.168.1.158",
-		wsURL:        "ws://192.168.1.158:10096/",
-		connectID:    connectID,
-		logger:       logger,
+		//host:         "192.168.1.158",
+		wsURL:     wsUrl, // "ws://192.168.1.158:10096/",
+		connectID: connectID,
+		logger:    logger,
 
 		asrMode:   asrMode,
 		chunkSize: chunkSize,
@@ -269,7 +276,8 @@ func (p *Provider) parseResponse(data []byte) (map[string]interface{}, error) {
 }
 
 // AddAudio 添加音频数据到缓冲区
-func (p *Provider) AddAudio(data []byte) error {
+func (p *Provider) AddAudio(data []byte, device string) error {
+	p.audioDeviceId = device
 	return p.AddAudioWithContext(context.Background(), data)
 }
 
@@ -307,7 +315,7 @@ func (p *Provider) AddAudioWithContext(ctx context.Context, data []byte) error {
 		} else {
 			p.sendDataCnt += 1
 			if p.sendDataCnt%20 == 0 {
-				log.Debugf("发送音频数据成功, 长度: %d 字节", len(data))
+				log.Debugf("[%v]发送音频数据成功, 长度: %d 字节", p.audioDeviceId, len(data))
 			}
 		}
 	}
@@ -316,7 +324,7 @@ func (p *Provider) AddAudioWithContext(ctx context.Context, data []byte) error {
 }
 
 func (p *Provider) StartStreaming(ctx context.Context) error {
-	log.Infof("----开始FunASR流式识别----")
+	log.Infof("[%v]----开始FunASR流式识别---- %v %v ", p.audioDeviceId, p.wsURL, p.connectID)
 	p.ResetStartListenTime()
 	// 加锁保护连接初始化
 	p.connMutex.Lock()
@@ -379,7 +387,7 @@ func (p *Provider) StartStreaming(ctx context.Context) error {
 		return fmt.Errorf("构造请求数据失败: %v", err)
 	}
 
-	log.Infof("[DEBUG] 发送FunASR初始请求: %s", string(requestBytes))
+	log.Infof("[%v] 发送FunASR初始请求: %s", p.audioDeviceId, string(requestBytes))
 
 	// 发送JSON请求
 	if err := p.conn.WriteMessage(websocket.TextMessage, requestBytes); err != nil {
@@ -387,7 +395,7 @@ func (p *Provider) StartStreaming(ctx context.Context) error {
 	}
 
 	p.isStreaming = true
-	log.Debugf("[DEBUG] FunASR流式识别初始化成功, connectID=%s, reqID=%s", p.connectID, p.reqID)
+	log.Debugf("[%v] FunASR流式识别初始化成功, connectID=%s, reqID=%s", p.audioDeviceId, p.connectID, p.reqID)
 
 	// 开启一个协程来处理响应
 	go func() {
@@ -397,10 +405,10 @@ func (p *Provider) StartStreaming(ctx context.Context) error {
 }
 
 func (p *Provider) ReadMessage() {
-	log.Infof("FunASR流式识别协程已启动")
+	log.Infof("[%v]FunASR流式识别协程已启动", p.audioDeviceId)
 	defer func() {
 		if r := recover(); r != nil {
-			log.Errorf("FunASR流式识别协程发生错误: %v", r)
+			log.Errorf("[%v]FunASR流式识别协程发生错误: %v", p.audioDeviceId, r)
 		}
 		p.connMutex.Lock()
 		p.isStreaming = false
@@ -409,7 +417,7 @@ func (p *Provider) ReadMessage() {
 			p.closeConnection()
 		}
 		p.connMutex.Unlock()
-		log.Infof("FunASR流式识别协程已结束")
+		log.Infof("[%v]FunASR流式识别协程已结束", p.audioDeviceId)
 	}()
 
 	for {
@@ -417,7 +425,7 @@ func (p *Provider) ReadMessage() {
 		p.connMutex.Lock()
 		if !p.isStreaming || p.conn == nil {
 			p.connMutex.Unlock()
-			log.Infof("FunASR流式识别已结束或连接已关闭，退出读取循环")
+			log.Infof("[%v] FunASR流式识别已结束或连接已关闭，退出读取循环", p.audioDeviceId)
 			return
 		}
 		conn := p.conn
@@ -454,13 +462,13 @@ func (p *Provider) ReadMessage() {
 
 		// 检查是否为最终结果
 		if isFinal, ok := result["is_final"].(bool); ok && isFinal {
-			log.Infof("FunASR识别完成 (is_final=true)")
+			log.Infof("[%v]FunASR识别完成 (is_final=true)", p.audioDeviceId)
 		}
 
 		isPassOffline := false
 		if result["mode"].(string) == "2pass-offline" {
 			isPassOffline = true
-			log.Infof("FunASR识别完成 2pass-offline")
+			log.Infof("[%v]FunASR识别完成 2pass-offline", p.audioDeviceId)
 		}
 
 		// 提取文本结果
@@ -470,7 +478,7 @@ func (p *Provider) ReadMessage() {
 		}
 
 		if text != "" {
-			log.Infof("FunASR识别结果: '%s'", text)
+			log.Infof("[%v]FunASR识别结果: '%s'", p.audioDeviceId, text)
 		} else {
 			// log.Debugf("[DEBUG] 响应中无文本内容")
 		}
@@ -514,7 +522,7 @@ func (p *Provider) ReadMessage() {
 	}
 }
 func (p *Provider) setErrorAndStop(err error) {
-	log.Warnf("FunASR发生错误，停止识别: %v", err)
+	log.Warnf("[%v]FunASR发生错误，停止识别: %v", p.audioDeviceId, err)
 	p.connMutex.Lock()
 	defer p.connMutex.Unlock()
 
@@ -529,9 +537,9 @@ func (p *Provider) setErrorAndStop(err error) {
 	if strings.Contains(errMsg, "use of closed network connection") ||
 		strings.Contains(errMsg, "close 1006") ||
 		strings.Contains(errMsg, "abnormal closure") {
-		log.Debugf("检测到连接断开: %v, sendDataCnt=%d", err, p.sendDataCnt)
+		log.Debugf("[%v]检测到连接断开: %v, sendDataCnt=%d", p.audioDeviceId, err, p.sendDataCnt)
 	} else {
-		log.Errorf("其他WebSocket错误: %v, sendDataCnt=%d", err, p.sendDataCnt)
+		log.Errorf("[%v]其他WebSocket错误: %v, sendDataCnt=%d", p.audioDeviceId, err, p.sendDataCnt)
 	}
 
 	if p.conn != nil {
@@ -594,7 +602,7 @@ func (p *Provider) sendAudioData(data []byte, isLast bool) error {
 
 // Reset 重置ASR状态
 func (p *Provider) Reset() error {
-	log.Infof("开始重置FunASR状态")
+	log.Infof("[%v]开始重置FunASR状态", p.audioDeviceId)
 	// 使用锁保护状态变更
 	p.connMutex.Lock()
 	defer p.connMutex.Unlock()
@@ -608,7 +616,7 @@ func (p *Provider) Reset() error {
 			"is_speaking": false,
 		}
 		endBytes, _ := json.Marshal(endMsg)
-		log.Infof("[DEBUG] 发送FunASR结束消息: %s", string(endBytes))
+		log.Infof("[%v] 发送FunASR结束消息: %s", p.audioDeviceId, string(endBytes))
 
 		// 使用goroutine和超时来避免阻塞和并发问题
 		done := make(chan error, 1)
@@ -637,7 +645,8 @@ func (p *Provider) Reset() error {
 	// 重置音频处理
 	p.InitAudioProcessing()
 
-	log.Infof("FunASR状态已重置")
+	log.Infof("[%v]FunASR状态已重置", p.audioDeviceId)
+	// p.audioDeviceId = ""
 
 	return nil
 }

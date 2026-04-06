@@ -2,10 +2,11 @@ package gosherpa
 
 import (
 	"context"
-	"github.com/gorilla/websocket"
 	"time"
 	"xiaozhi-server-go/src/core/providers/asr"
 	"xiaozhi-server-go/src/core/utils"
+
+	"github.com/gorilla/websocket"
 )
 
 type Provider struct {
@@ -55,7 +56,7 @@ func (p *Provider) Transcribe(ctx context.Context, audioData []byte) (string, er
 }
 
 // 添加音频数据到缓冲区
-func (p *Provider) AddAudio(data []byte) error {
+func (p *Provider) AddAudio(data []byte, device string) error {
 	p.conn.WriteMessage(websocket.BinaryMessage, data)
 
 	return nil

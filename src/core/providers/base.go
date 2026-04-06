@@ -21,7 +21,7 @@ type ASRProvider interface {
 	// 直接识别音频数据
 	Transcribe(ctx context.Context, audioData []byte) (string, error)
 	// 添加音频数据到缓冲区
-	AddAudio(data []byte) error
+	AddAudio(data []byte, device string) error
 
 	SetListener(listener AsrEventListener)
 	// 复位ASR状态

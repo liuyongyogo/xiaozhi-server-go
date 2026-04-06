@@ -325,7 +325,7 @@ func (p *Provider) parseResponse(data []byte) (map[string]interface{}, error) {
 }
 
 // AddAudio 添加音频数据到缓冲区
-func (p *Provider) AddAudio(data []byte) error {
+func (p *Provider) AddAudio(data []byte, device string) error {
 	return p.AddAudioWithContext(context.Background(), data)
 }
 

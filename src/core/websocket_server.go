@@ -159,7 +159,7 @@ func (ws *WebSocketServer) Stop() error {
 func (ws *WebSocketServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := ws.upgrader.Upgrade(w, r)
 	if err != nil {
-		log.Errorf("WebSocket升级失败: %v", err)
+		log.Errorf("WebSocket升级失败: %v %v", err, r.URL)
 		return
 	}
 

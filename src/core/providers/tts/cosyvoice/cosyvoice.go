@@ -112,7 +112,7 @@ func (p *Provider) ToTTS(text string) (string, error) {
 	// Use a unique filename
 	tempFile := filepath.Join(outputDir, fmt.Sprintf("macos_say_%v.mp3", time.Now().Format("2006-01-02_15_04_05.000000")))
 	tempaiff := filepath.Join(outputDir, fmt.Sprintf("macos_say_%v.aiff", time.Now().Format("2006-01-02_15_04_05.000000")))
-	log.Warnf("====================aiff %v", tempaiff)
+	// log.Warnf("====================aiff %v", tempaiff)
 	// say "你好，这是一个示例文本。" -o output.aiff && ffmpeg -i output.aiff -codec:a libmp3lame output.mp3
 	// cmd := exec.Command("say", string(text), "-o", text+".aiff", " && ", "ffmpeg", "-i", text+".aiff", "-codec:a", "libmp3lame", tempFile)
 	cmd := exec.Command("say", string(text), "-o", tempaiff) //meijia //, "-v", "yue"
@@ -126,7 +126,11 @@ func (p *Provider) ToTTS(text string) (string, error) {
 		return "", fmt.Errorf("执行 lame 命令失败：%v-> %v", err, cmd2.Args)
 	}
 
-	log.Warnf("====================mp3 %v", tempFile)
+	// log.Warnf("====================mp3 %v", tempFile)
+	// remove tempaiff
+	if err := os.Remove(tempaiff); err != nil {
+		log.Errorf("删除临时文件失败: %v", err)
+	}
 	return tempFile, nil
 
 	/*

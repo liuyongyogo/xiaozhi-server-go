@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -274,6 +275,7 @@ func (h *ConnectionHandler) LogError(msg string) {
 
 // Handle 处理WebSocket连接
 func (h *ConnectionHandler) Handle(conn Connection) {
+	log.Warnf("HandleX=========%v", conn.GetID())
 	defer conn.Close()
 
 	h.conn = conn
@@ -352,7 +354,7 @@ func (h *ConnectionHandler) processClientAudioMessagesCoroutine() {
 			if h.closeAfterChat {
 				continue
 			}
-			if err := h.providers.asr.AddAudio(audioData); err != nil {
+			if err := h.providers.asr.AddAudio(audioData, h.deviceID); err != nil {
 				log.Errorf("[%v] 处理音频数据失败: %v", h.deviceID, err)
 			}
 		}
@@ -411,7 +413,7 @@ func (h *ConnectionHandler) OnAsrResult(result string) bool {
 
 // clientAbortChat 处理中止消息
 func (h *ConnectionHandler) clientAbortChat() error {
-	log.Infof(h.deviceID, "收到客户端中止消息，停止语音识别")
+	log.Infof("[%v]收到客户端中止消息，停止语音识别", h.deviceID)
 	h.stopServerSpeak()
 	h.sendTTSMessage("stop", "", 0)
 	h.clearSpeakStatus()
@@ -427,7 +429,7 @@ func (h *ConnectionHandler) QuitIntent(text string) bool {
 	cleand_text := utils.RemoveAllPunctuation(text) // 移除标点符号，确保匹配准确
 	// 检查是否包含退出命令
 	for _, cmd := range exitCommands {
-		log.Debugf("检查退出命令: %s,%s", cmd, cleand_text)
+		log.Debugf("[%v]检查退出命令: %s,%s", h.deviceID, cmd, cleand_text)
 		//判断相等
 		if cleand_text == cmd {
 			log.Infof(h.deviceID, "收到客户端退出意图，准备结束对话")
@@ -823,7 +825,7 @@ func (h *ConnectionHandler) processTTSQueueCoroutine() {
 
 // 服务端打断说话
 func (h *ConnectionHandler) stopServerSpeak() {
-	log.Infof(h.deviceID, "服务端停止说话")
+	log.Infof("[%v]服务端停止说话", h.deviceID)
 	atomic.StoreInt32(&h.serverVoiceStop, 1)
 	h.cleanTTSAndAudioQueue(false)
 }
@@ -846,11 +848,11 @@ func (h *ConnectionHandler) deleteAudioFileIfNeeded(filepath string, reason stri
 	}
 
 	// 删除非缓存音频文件
-	// if err := os.Remove(filepath); err != nil {
-	// 	log.Errorf(h.deviceID, fmt.Sprintf(reason+" 删除音频文件失败: %v", err))
-	// } else {
-	// 	log.Infof(reason+" 已删除音频文件: %s", filepath))
-	// }
+	if err := os.Remove(filepath); err != nil {
+		log.Errorf("[%v] %s 删除音频文件失败: %v", h.deviceID, reason, err)
+	} else {
+		log.Infof("[%v] %s 已删除音频文件: %s", h.deviceID, reason, filepath)
+	}
 }
 
 // processTTSTask 处理单个TTS任务
@@ -878,7 +880,7 @@ func (h *ConnectionHandler) processTTSTask(text string, textIndex int, round int
 	text = utils.RemoveAllEmoji(text)
 
 	if text == "" {
-		log.Warn(fmt.Sprintf("收到空文本，无法合成语音, 索引: %d", textIndex))
+		log.Warn(fmt.Sprintf("[%v]收到空文本，无法合成语音, 索引: %d", h.deviceID, textIndex))
 		return
 	}
 
@@ -908,7 +910,7 @@ func (h *ConnectionHandler) processTTSTask(text string, textIndex int, round int
 	if textIndex == 1 {
 		now := time.Now()
 		ttsSpentTime := now.Sub(ttsStartTime)
-		log.Infof("TTS转换耗时: %s, 文本: %s, 索引: %d", ttsSpentTime, text, textIndex)
+		log.Infof("[%v]TTS转换耗时: %s, 文本: %s, 索引: %d", h.deviceID, ttsSpentTime, text, textIndex)
 	}
 
 }
@@ -984,7 +986,7 @@ clearAudioQueue:
 	for {
 		select {
 		case task := <-h.audioMessagesQueue:
-			log.Infof(h.deviceID, fmt.Sprintf(msgPrefix+"丢弃一个音频任务: %s", task.text))
+			log.Infof("[%v]%s丢弃一个音频任务: %s", h.deviceID, msgPrefix, task.text)
 			// 根据配置删除被丢弃的音频文件
 			h.deleteAudioFileIfNeeded(task.filepath, msgPrefix+"丢弃音频任务时")
 		default:
